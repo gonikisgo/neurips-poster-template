@@ -1,0 +1,25 @@
+@import url('https://fonts.googleapis.com/css2?family=Bangers&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+@import 'tailwindcss';
+
+@theme {
+  --font-display: 'Bangers', 'Impact', sans-serif;
+  --font-body: 'IBM Plex Sans', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+  --color-ink: #141414;
+  --color-paper: #f4efe6;
+  --color-panel: #d9d5c9;
+  --color-comic-yellow: #f4d85a;
+  --color-comic-red: #c93a2b;
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    margin: 0;
+    min-height: 100%;
+    background: #2a2a2a;
+    font-family: var(--font-body);
+    color: var(--color-ink);
+  }
+}
