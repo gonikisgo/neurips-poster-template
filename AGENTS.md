@@ -1,12 +1,16 @@
 # figma-make-app
 
-React + Vite + Tailwind CSS project running inside Figma Make.
+React + Vite + Tailwind CSS project.
+
+**Read [instruction.md](instruction.md) first** — it defines the poster-editing workflow for this
+machine (start the dev server on 8443, edit App.tsx + mirror tools/poster_svg.py, export via .venv).
 
 ## Development Server
 
-A Vite development server is **already running** on `$PORT` (default 8443). You don't need to start it manually.
+On this machine the server is **not** auto-started. Follow instruction.md section 1 to check for it
+and start Vite on port 8443 (plain HTTP) if it is down. The user views the page through a VS Code
+port-forward of 8443 and relies on hot reload, so keep it running all session.
 
-- Preview URL: The user can access the running app through the preview panel
 - Hot reload: Changes to source files are reflected immediately
 
 ## Project Structure
