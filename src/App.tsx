@@ -24,41 +24,44 @@ const CANVAS_PARAM = new URLSearchParams(window.location.search).get('canvas')
 const CANVAS = CANVAS_PARAM ? `#${CANVAS_PARAM}` : BG_MODE === 'classic' ? '#f9f5ea' : BG_MODE === 'white' ? '#f6f4ee' : '#e8d9a8'
 const BORDER = BG_MODE === 'gray' ? 34 : 18
 const TITLE_SCALE = 1.08 // whole title card (box + text) scaled up around its centre
-const TITLE = { x: W / 2, y: 90 + (5400 * TITLE_SCALE) / 2 } // centre: the scaled card box starts at y=90
+const TITLE = { x: W / 2, y: 30 + (5000 * TITLE_SCALE) / 2 } // centre: the scaled card box starts at y=30
 
 /* Panel rectangles [x, y, w, h]. Top band: context story | task + attributes | title | link + numbers. Below: a loose, overlapping pile. */
 const R = {
-  // top band (shorter than before so the results pile gets more room)
-  C: [13950, 2580, 3084, 1940],
-  A2: [4767, 4875, 2616, 3900],
+  // top band: left stack (revised classes, examples), title in the middle, right: splits, distribution, link
+  C: [13950, 2580, 3084, 2300],
   QR: [14000, 320, 5556, 2000],
   B: [17250, 2580, 2200, 1940],
-  // results pile: bigger, overlapping, rotated (later entries lie on top)
-  M1: [380, 4940, 4000, 3880],
-  // story zig-zags once: pipeline (M1) -> classes & scoring below it (M6) -> top row at eye level
-  // (examples, accuracy, attributes, tasks) -> bottom row, nothing that needs close looking
-  // (derived benchmarks, prior reannotations, iterative, take-aways)
-  M2: [3547, 695, 2850, 3150],
-  M3: [7800, 5200, 4200, 3600],
-  M4: [12350, 4950, 3300, 3000],
-  M5: [16050, 4650, 3500, 4180],
-  M6: [320, 320, 3700, 2250], // revised classes + prior reannotations, top left
-  M7: [4300, 9250, 3700, 2520],
-  M9: [12100, 8350, 3800, 3960],
-  M10: [16150, 9100, 3400, 1700],
+  M2: [320, 320, 3700, 2350],
+  M6: [320, 2920, 3700, 2250], // revised classes + prior reannotations, below M2
+  // bottom band, under the title, full width, story left to right: 9 attributes -> 10 accuracy -> 12 tasks -> 13 derived -> 15 iterative -> 16 recommendations.
+  // (sizes = base size x SCALE; card 6 sits under card 9, which may overlap it for now)
+  A2: [320, 5300, 4000, 4300],
+  M1: [320, 10050, 8200, 2400],
+  M3: [5633, 7240, 4200, 5160],
+  M5: [5633, 5700, 4200, 1300],
+  M8: [9943, 5700, 4200, 3120],
+  M7: [9943, 9100, 4300, 3300],
+  M9: [14400, 5700, 3800, 3960],
+  M10: [14400, 9850, 3300, 1650],
 } as const satisfies Record<string, readonly [number, number, number, number]>
 type PanelId = keyof typeof R
 
 /* Extra rotation (deg) for the scattered pile */
 const ROT: Partial<Record<PanelId, number>> = {
-  M1: -2.5,
-  A2: 3,
-  M3: -2,
-  M4: 3.5,
-  M5: -2.5,
-  M7: -3,
-  M9: -2.5,
-  M10: 3,
+  M1: -1.2,
+  A2: 1.5,
+  M3: -1.2,
+  M5: -1.2,
+  M8: 1.2,
+  M7: -1.5,
+  M9: -1.2,
+  M10: 1.5,
+}
+
+/* content scale per card: the card's R size is its base size x this (cards without an entry are drawn at 1) */
+const SCALE: Partial<Record<PanelId, number>> = {
+  M10: 3300 / 3400,
 }
 
 const INK = '#141414'
@@ -106,26 +109,24 @@ const META: Record<
     group: 'method',
     hint: 'Train annotators → class groups → per-image labels → verification',
   },
-  M2: { n: 4, title: 'What reannotation fixes', group: 'results', variant: 'dark', contrib: '(i)' },
-  M3: { n: 10, title: 'Accuracy on ReGT', group: 'results', variant: 'white', contrib: '(ii)' },
-  M4: { n: 11, title: 'Attribute effect', group: 'results', contrib: '(ii)' },
-  M5: { n: 12, title: 'One benchmark, many tasks', group: 'results', contrib: '(ii)' },
-  M6: { n: 7, title: 'Revised classes & prior efforts', group: 'method', contrib: '(i)' },
+  M2: { n: 4, title: 'What reannotation fixes', group: 'results', variant: 'dark' },
+  M3: { n: 10, title: 'Accuracy on ReGT', group: 'results', variant: 'white' },
+  M5: { n: 12, title: 'One benchmark, many tasks', group: 'results' },
+  M8: { n: 13, title: 'Recognition on object crops', group: 'results' },
+  M6: { n: 7, title: 'Revised classes & prior efforts', group: 'method' },
   M7: {
-    n: 13,
+    n: 14,
     title: 'Errors in derived benchmarks',
     group: 'results',
     variant: 'white',
-    contrib: '(iii)',
   },
   M9: {
     n: 15,
     title: 'Annotation is iterative',
     group: 'method',
     variant: 'dark',
-    contrib: '(iv)',
   },
-  M10: { n: 16, title: 'Recommendations', group: 'takeaway', variant: 'white', contrib: '(iv)' },
+  M10: { n: 16, title: 'Recommendations', group: 'takeaway', variant: 'white' },
 }
 
 const tiltFor = (n: number) => ({
@@ -390,13 +391,14 @@ function AttrNote({ name, color, text }: { name: string; color: string; text: st
   )
 }
 
-function AttrCell({ name, color, src, text, pos = 'center' }: { name: string; color: string; src: string; text: string; pos?: string }) {
+function AttrCell({ name, color, src, text, pos = 'center', stat }: { name: string; color: string; src: string; text: string; pos?: string; stat?: number }) {
   return (
     <div className="flex min-w-0 flex-1 flex-col" style={{ gap: 18 }}>
       <div style={{ aspectRatio: '4 / 3', overflow: 'hidden' }}>
         <img src={asset(src)} alt="" className="block h-full w-full" style={{ objectFit: 'cover', objectPosition: pos }} />
       </div>
       <AttrNote name={name} color={color} text={text} />
+      {stat !== undefined && <AttrStats g={stat} />}
     </div>
   )
 }
@@ -422,10 +424,8 @@ const APP_LOOP: [string, string] = ['Revise mid-run, verify at the end', 'edge c
 const APP_SHOTS: [string, string][] = [
   ['app-loop-1.png', 'pick from the queue'],
   ['app-loop-2.png', 'proposed boxes + top-20 likely labels'],
-  ['app-loop-3.png', 'box what you notice'],
-  ['app-loop-4.png', 'done, back to the queue'],
 ]
-const PIPE = { gutter: 120, indent: 170, row: 178, chipMid: 53, loopW: 3390 } // step row: 74px title + 66px line; chip centre 53px from its top
+const PIPE = { gutter: 120, indent: 170, row: 178, chipMid: 53, loopW: 4400 } // step row: 74px title + 66px line; chip centre 53px from its top
 
 function PipeStep({ n, t, s, children }: { n: string; t: string; s: ReactNode; children?: ReactNode }) {
   return (
@@ -481,14 +481,14 @@ function AppLoop() {
   // grid geometry (px): shot height from its aspect ratio, caption = 22 margin + one CAP px line
   const CAP = 54
   const shotH = (cw * 1112) / 1920
-  const gridH = 2 * (shotH + 22 + CAP * 1.25) + 80
+  const gridH = shotH + 22 + CAP * 1.25
   const svgTop = gridH + 20 // the svg below the grid starts here
   const backY = shotH / 2 - svgTop // shot 1 mid-height, in svg coordinates
   const backX = -90 // return lane, left of the screenshots (under the step-4 chip)
   return (
     <div style={{ width: W0, marginTop: 64 }}>
       <div className="grid items-start" style={{ gridTemplateColumns: '1fr 1fr', columnGap: GAP, rowGap: 80 }}>
-        {APP_SHOTS.map(([src, cap], i) => (
+        {APP_SHOTS.map(([src, cap]) => (
           <div key={src} className="relative min-w-0">
             <img
               src={asset(src)}
@@ -500,20 +500,6 @@ function AppLoop() {
                 objectFit: 'cover',
               }}
             />
-            {/* yellow, so the in-tool loop numbers don't read as pipeline steps 1–4 */}
-            <div
-              className="absolute font-mono font-bold text-ink"
-              style={{
-                left: 34,
-                top: -40,
-                background: '#f4d85a',
-                border: '10px solid #141414',
-                padding: '6px 24px 4px',
-                fontSize: 52,
-              }}
-            >
-              {i + 1}
-            </div>
             <div
               className="text-center font-mono font-semibold"
               style={{
@@ -571,12 +557,20 @@ function PipelineCard() {
         />
       </div>
       <div className="flex min-w-0 flex-1 flex-col" style={{ gap: 90 }}>
-        <div className="flex flex-col" style={{ gap: 44 }}>
-          {APP_STEPS.map(([n, t, s]) => (
-            <PipeStep key={n} n={n} t={t} s={s}>
-              {n === '4' && <AppLoop />}
-            </PipeStep>
-          ))}
+        <div className="flex items-start" style={{ gap: 120 }}>
+          {/* steps 1-3 on the left, step 4 with the tool screenshots on the right */}
+          <div className="flex shrink-0 flex-col" style={{ gap: 44, width: 3100 }}>
+            {APP_STEPS.slice(0, 3).map(([n, t, s]) => (
+              <PipeStep key={n} n={n} t={t} s={s} />
+            ))}
+          </div>
+          <div className="min-w-0 flex-1">
+            {APP_STEPS.slice(3).map(([n, t, s]) => (
+              <PipeStep key={n} n={n} t={t} s={s}>
+                <AppLoop />
+              </PipeStep>
+            ))}
+          </div>
         </div>
         <PipeStep n="↻" t={APP_LOOP[0]} s={APP_LOOP[1]} />
       </div>
@@ -586,7 +580,9 @@ function PipelineCard() {
 
 /* ---------- Image splits (the paper's Fig. 4 as a left-to-right tree) ---------- */
 const TREE = { w: 2848, row: 262, gap: 36 }
-const TREE_H = 5 * TREE.row + 4 * TREE.gap
+const N_DROP = 60 // N sits lower than the M row grid: extra air below M
+const N_EXTRA = 180 // N is taller than a row: room for the QR code beside it
+const TREE_H = 5 * TREE.row + 4 * TREE.gap + N_DROP + N_EXTRA
 const rowY = (r: number) => r * (TREE.row + TREE.gap)
 const COL = { a: { x: 0, w: 460 }, b: { x: 550, w: 830 }, c: { x: 1470, w: 1378 } }
 // semi-transparent tints (as in the paper): poster green = Method role colour, poster red = RED
@@ -625,13 +621,13 @@ const TREE_NODES: TreeNode[] = [
     tone: 'grey',
     code: 'S',
     pct: '64.1%',
-    desc: 'one ReGT label',
+    desc: 'single ReGT label',
   },
   {
     key: 'N',
     col: 'b',
-    y: rowY(2),
-    h: TREE.row,
+    y: rowY(4) + N_DROP,
+    h: TREE.row + N_EXTRA,
     tone: 'grey',
     code: 'N',
     pct: '4.0%',
@@ -640,12 +636,12 @@ const TREE_NODES: TreeNode[] = [
   {
     key: 'M',
     col: 'b',
-    y: rowY(3),
+    y: rowY(2),
     h: 2 * TREE.row + TREE.gap,
     tone: 'grey',
     code: 'M',
     pct: '31.9%',
-    desc: 'several ReGT labels',
+    desc: 'multiple ReGT labels',
   },
   {
     key: 'S+',
@@ -670,7 +666,7 @@ const TREE_NODES: TreeNode[] = [
   {
     key: 'M+',
     col: 'c',
-    y: rowY(3),
+    y: rowY(2),
     h: TREE.row,
     tone: 'green',
     code: 'M+',
@@ -680,7 +676,7 @@ const TREE_NODES: TreeNode[] = [
   {
     key: 'M−',
     col: 'c',
-    y: rowY(4),
+    y: rowY(3),
     h: TREE.row,
     tone: 'red',
     code: 'M−',
@@ -691,8 +687,8 @@ const TREE_NODES: TreeNode[] = [
 const nodeByKey = (k: string) => TREE_NODES.find((n) => n.key === k)!
 const TREE_EDGES: [string, string][] = [
   ['A', 'S'],
-  ['A', 'N'],
   ['A', 'M'],
+  ['A', 'N'],
   ['S', 'S+'],
   ['S', 'S−'],
   ['M', 'M+'],
@@ -705,13 +701,13 @@ function GtDefs() {
     <div className="absolute flex flex-col" style={{ left: 100, top: 40, gap: 12 }}>
       {(
         [
-          ['ReGT', 'ReImageNet: our new multilabel boxes and attributes'],
-          ['ImGT', 'the original ImageNet-1k single-label ground truth'],
+          ['ReGT', '- our new ReImageNet multilabel boxes and attributes'],
+          ['ImGT', '- the original ImageNet-1k single-label ground truth'],
         ] as ['ReGT' | 'ImGT', string][]
       ).map(([k, t]) => (
-        <div key={k} className="flex items-center" style={{ gap: 30 }}>
-          <span className="inline-block text-center" style={{ width: 230 }}>
-            <GtChip k={k} size={62} />
+        <div key={k} className="flex items-center" style={{ gap: 20 }}>
+          <span className="font-mono font-bold text-ink" style={{ fontSize: 62, letterSpacing: 2 }}>
+            {k}
           </span>
           <div className="whitespace-nowrap font-body font-semibold text-ink" style={{ fontSize: 62, lineHeight: 1.15 }}>
             {t}
@@ -734,7 +730,7 @@ function SplitsTree() {
     return `M ${x1} ${y1} H ${mid} V ${y2} H ${x2}`
   }
   return (
-    <div className="absolute" style={{ left: 100, top: 250, width: TREE.w, height: TREE_H }}>
+    <div className="absolute" style={{ left: 100, top: 320, width: TREE.w, height: TREE_H }}>
       <svg className="absolute inset-0" width={TREE.w} height={TREE_H} style={{ overflow: 'visible' }}>
         {TREE_EDGES.map((e) => (
           <path key={e.join()} d={edge(e)} fill="none" stroke={INK} strokeWidth={10} />
@@ -768,6 +764,29 @@ function SplitsTree() {
           </div>
         </div>
       ))}
+      {/* N: a separate effort on these images (OOD), QR to the colleagues' work, on a sticky note */}
+      <div
+        className="absolute flex items-center"
+        style={{
+          left: COL.b.x + COL.b.w - 70, // overlaps N's right edge: the note is stuck onto the block
+          top: rowY(4) + N_DROP - 19,
+          width: 1420,
+          height: 480,
+          gap: 50,
+          padding: '0 40px 0 120px',
+          boxSizing: 'border-box',
+          background: 'linear-gradient(180deg, #fffefa 0%, #f6f2e8 100%)',
+          boxShadow: '14px 22px 34px rgba(20,20,20,0.32), 0 0 0 2px rgba(20,20,20,0.08)',
+          transform: 'rotate(-1.8deg)',
+        }}
+      >
+        {/* tape */}
+        <div className="absolute" style={{ left: -70, top: 40, width: 260, height: 70, background: 'rgba(214,206,186,0.8)', boxShadow: '0 2px 6px rgba(20,20,20,0.18)', transform: 'rotate(-38deg)' }} />
+        <img src={asset('qr-n.png')} alt="QR code: OOD study" className="block shrink-0" style={{ width: 420, height: 420 }} />
+        <div className="flex-1 whitespace-nowrap font-body font-semibold text-ink" style={{ fontSize: 56, lineHeight: 1.12 }}>
+          Studied separately as OODs
+        </div>
+      </div>
       {/* legend: what + / - mean */}
       <div className="absolute flex items-center whitespace-nowrap font-body font-semibold text-ink" style={{ left: 0, top: TREE_H + 50, gap: 110, fontSize: 60 }}>
         <span className="flex items-center" style={{ gap: 24 }}>
@@ -783,7 +802,7 @@ function SplitsTree() {
 
 /* ---------- Labels & boxes per image (paper Fig. 5) as a comic duotone histogram ----------
    Labels: solid comic-yellow bars. BBoxes: red halftone-hatched bars behind them.
-   Orange dashed = means (1.63 / 1.99), red dotted = median 1. Bins 1-5 of labels are
+   Bins 1-5 of labels are
    exact Tab. 6 counts; the long tails are read off the paper's log plot. */
 const DIST = {
   labels: [480, 32033, 8769, 3656, 1842, 911, 400, 170, 90, 45, 25, 15, 10, 4, 4],
@@ -828,17 +847,6 @@ function DistBars() {
         {/* series: boxes hatched behind, labels solid yellow in front (bins 1-5 exact, tails from the paper's plots) */}
         {bars(DIST.boxes, 'url(#db-hatch)')}
         {bars(DIST.labels, '#f4d85a')}
-
-        {/* median (red dotted, both series 1) + means (orange dashed) */}
-        <line x1={X(1)} y1={PT - 25} x2={X(1)} y2={PT + ph} stroke={RED} strokeWidth={9} strokeDasharray="3 20" strokeLinecap="round" />
-        <line x1={X(DIST.meanLabels)} y1={PT - 25} x2={X(DIST.meanLabels)} y2={PT + ph} stroke="#f08a24" strokeWidth={9} strokeDasharray="30 20" />
-        <line x1={X(DIST.meanBoxes)} y1={PT - 25} x2={X(DIST.meanBoxes)} y2={PT + ph} stroke="#f08a24" strokeWidth={9} strokeDasharray="30 20" />
-        <text x={X(DIST.meanLabels) - 14} y={PT - 60} textAnchor="end" dominantBaseline="central" className="font-mono font-semibold" fill="#f08a24" fontSize={64}>
-          1.63
-        </text>
-        <text x={X(DIST.meanBoxes) + 14} y={PT - 60} dominantBaseline="central" className="font-mono font-semibold" fill="#f08a24" fontSize={64}>
-          1.99
-        </text>
 
         {/* axes */}
         <line x1={PL} y1={PT} x2={PL} y2={PT + ph} stroke={INK} strokeWidth={9} />
@@ -891,9 +899,9 @@ function DistBars() {
    ===================================================================== */
 type Fam = 'mllm' | 'vlm' | 'sup'
 const FAM: Record<Fam, { name: string; color: string }> = {
-  mllm: { name: 'MLLMs', color: '#2f6fe0' },
+  mllm: { name: 'MLLMs', color: '#f4d85a' },
   vlm: { name: 'VLMs', color: RED },
-  sup: { name: 'Supervised', color: '#f4d85a' },
+  sup: { name: 'Supervised', color: '#2f6fe0' },
 }
 const FAMS: Fam[] = ['mllm', 'vlm', 'sup']
 const GREEN = '#2aa876'
@@ -1054,12 +1062,12 @@ function FamSwatch({ f, size = 60 }: { f: Fam; size?: number }) {
   return <span className="inline-block shrink-0" style={{ width: size, height: size, background: FAM[f].color, border: `8px solid ${INKV}` }} />
 }
 
-function FamLegend({ extra, only, labels }: { extra?: ReactNode; only?: Fam[]; labels?: Partial<Record<Fam, string>> }) {
+function FamLegend({ extra, only, labels, size = 58 }: { extra?: ReactNode; only?: Fam[]; labels?: Partial<Record<Fam, string>>; size?: number }) {
   return (
-    <div className="flex flex-wrap items-center whitespace-nowrap font-mono font-semibold text-ink" style={{ columnGap: 64, rowGap: 20, fontSize: 58 }}>
+    <div className="flex flex-wrap items-center whitespace-nowrap font-mono font-semibold text-ink" style={{ columnGap: 64, rowGap: 20, fontSize: size }}>
       {(only ?? FAMS).map((f) => (
         <span key={f} className="flex items-center" style={{ gap: 20 }}>
-          <FamSwatch f={f} />
+          <FamSwatch f={f} size={Math.round(size * 1.03)} />
           {labels?.[f] ?? FAM[f].name}
         </span>
       ))}
@@ -1069,7 +1077,7 @@ function FamLegend({ extra, only, labels }: { extra?: ReactNode; only?: Fam[]; l
 }
 
 /* small subset chip, same tints as the Image-splits tree */
-function SubsetChip({ code }: { code: string }) {
+function SubsetChip({ code, size = 58 }: { code: string; size?: number }) {
   const bad = code.includes('−')
   return (
     <span
@@ -1078,7 +1086,7 @@ function SubsetChip({ code }: { code: string }) {
         background: bad ? TONE.red : TONE.green,
         border: `8px solid ${INKV}`,
         padding: '4px 22px 2px',
-        fontSize: 58,
+        fontSize: size,
         lineHeight: 1.15,
       }}
     >
@@ -1360,12 +1368,12 @@ function ClassesCard() {
 /* ---------- #09 Accuracy on ReGT: dumbbells + subset slopes ---------- */
 function AccDumbbell() {
   const W0 = 3960
-  const PL = 860,
-    PR = 3440,
+  const PL = 1000,
+    PR = 3400,
     D0 = 68,
     D1 = 93
   const X = (v: number) => PL + ((v - D0) / (D1 - D0)) * (PR - PL)
-  const ROW = 126,
+  const ROW = 136,
     GAP = 54,
     TOP = 30
   let y = TOP
@@ -1384,7 +1392,7 @@ function AccDumbbell() {
         const rs = rows.filter((r) => r.m.fam === f)
         const t = rs[0].top - GAP / 2 + 4
         const b = rs[rs.length - 1].top + ROW + GAP / 2 - 4
-        return <rect key={`band${f}`} x={-20} y={t} width={W0 + 40} height={b - t} fill={FAM[f].color} fillOpacity={f === 'sup' ? 0.28 : 0.13} />
+        return <rect key={`band${f}`} x={-20} y={t} width={W0 + 40} height={b - t} fill={FAM[f].color} fillOpacity={f === 'mllm' ? 0.28 : 0.13} />
       })}
       {[70, 75, 80, 85, 90].map((v) => (
         <line key={v} x1={X(v)} y1={TOP - 10} x2={X(v)} y2={axisY} stroke="currentColor" strokeOpacity={0.14} strokeWidth={5} strokeDasharray="18 18" />
@@ -1395,8 +1403,8 @@ function AccDumbbell() {
         const b = rs[rs.length - 1].top + ROW - 8
         return (
           <g key={f}>
-            <rect x={0} y={t} width={84} height={b - t} fill={FAM[f].color} stroke="currentColor" strokeWidth={7} />
-            <text transform={`translate(42,${(t + b) / 2}) rotate(-90)`} textAnchor="middle" dominantBaseline="central" className="font-mono font-semibold" fill={f === 'sup' ? INK : '#fff'} fontSize={52} letterSpacing={2}>
+            <rect x={0} y={t} width={100} height={b - t} fill={FAM[f].color} stroke="currentColor" strokeWidth={7} />
+            <text transform={`translate(50,${(t + b) / 2}) rotate(-90)`} textAnchor="middle" dominantBaseline="central" className="font-mono font-semibold" fill={f === 'mllm' ? INK : '#fff'} fontSize={64} letterSpacing={2}>
               {FAM[f].name}
             </text>
           </g>
@@ -1404,21 +1412,21 @@ function AccDumbbell() {
       })}
       {rows.map(({ m, cy }) => (
         <g key={m.name}>
-          <text x={130} y={cy} dominantBaseline="central" className="font-body font-semibold" fill="currentColor" fontSize={66}>
+          <text x={146} y={cy} dominantBaseline="central" className="font-body font-semibold" fill="currentColor" fontSize={82}>
             {m.name}
           </text>
           <line x1={X(m.imgt)} y1={cy} x2={X(m.regt)} y2={cy} stroke="currentColor" strokeWidth={40} />
           <line x1={X(m.imgt)} y1={cy} x2={X(m.regt)} y2={cy} stroke={FAM[m.fam].color} strokeWidth={24} />
           <circle cx={X(m.imgt)} cy={cy} r={30} fill="#fff" stroke="currentColor" strokeWidth={9} />
           <circle cx={X(m.regt)} cy={cy} r={36} fill={FAM[m.fam].color} stroke="currentColor" strokeWidth={9} />
-          <text x={X(m.regt) + 66} y={cy} dominantBaseline="central" className="font-mono font-semibold" fill="currentColor" fontSize={62}>
+          <text x={X(m.regt) + 66} y={cy} dominantBaseline="central" className="font-mono font-semibold" fill="currentColor" fontSize={74}>
             {signed(m.regt - m.imgt, 2)}
           </text>
         </g>
       ))}
       <line x1={PL - 30} y1={axisY} x2={PR + 30} y2={axisY} stroke="currentColor" strokeWidth={9} />
       {[70, 75, 80, 85, 90].map((v) => (
-        <text key={v} x={X(v)} y={axisY + 72} textAnchor="middle" className="font-mono" fill="currentColor" fontSize={58}>
+        <text key={v} x={X(v)} y={axisY + 72} textAnchor="middle" className="font-mono" fill="currentColor" fontSize={72}>
           {v}
         </text>
       ))}
@@ -1427,8 +1435,8 @@ function AccDumbbell() {
 }
 
 function SubsetSlope() {
-  const W0 = 2700
-  const XS = [520, 1220, 1660, 2300] // S+, S−, M+, M− (shifted left: leaves a clear margin to the callouts)
+  const W0 = 3960 // = the card's inner width, so the gap between the two groups sits at the card's middle (x = 1980)
+  const XS = [730, 1530, 2430, 3230] // S+, S−, M+, M−
   const PT = 150,
     PB = 880,
     D0 = 25,
@@ -1445,10 +1453,10 @@ function SubsetSlope() {
   const codes = ['S+', 'S−', 'M+', 'M−']
   return (
     <svg className="text-ink" width={W0} height={H0} style={{ display: 'block', overflow: 'visible' }}>
-      <text x={(XS[0] + XS[1]) / 2} y={44} textAnchor="middle" className="font-mono font-semibold" fill="currentColor" fontSize={68} letterSpacing={5}>
+      <text x={(XS[0] + XS[1]) / 2} y={64} textAnchor="middle" className="font-mono font-semibold" fill="currentColor" fontSize={90} letterSpacing={5}>
         SINGLE-LABEL
       </text>
-      <text x={(XS[2] + XS[3]) / 2} y={44} textAnchor="middle" className="font-mono font-semibold" fill="currentColor" fontSize={68} letterSpacing={5}>
+      <text x={(XS[2] + XS[3]) / 2} y={64} textAnchor="middle" className="font-mono font-semibold" fill="currentColor" fontSize={90} letterSpacing={5}>
         MULTI-LABEL
       </text>
       {XS.map((x, k) => (
@@ -1462,7 +1470,7 @@ function SubsetSlope() {
       ))}
       {/* single models, thin and faded, behind the family means */}
       {MODELS.map((m) => [0, 2].map((k) => <line key={`${m.name}${k}`} x1={XS[k]} y1={Y(m.sub[k])} x2={XS[k + 1]} y2={Y(m.sub[k + 1])} stroke={FAM[m.fam].color} strokeOpacity={0.55} strokeWidth={9} />))}
-      {data.map(({ f, v }) =>
+      {[...data].reverse().map(({ f, v }) =>
         [0, 2].map((k) => (
           <g key={`${f}${k}`}>
             <line x1={XS[k]} y1={Y(v[k])} x2={XS[k + 1]} y2={Y(v[k + 1])} stroke="currentColor" strokeWidth={42} strokeLinecap="round" />
@@ -1470,7 +1478,10 @@ function SubsetSlope() {
           </g>
         )),
       )}
-      {data.map(({ f, v }, i) =>
+      {data
+        .map((d, i) => ({ ...d, i }))
+        .reverse()
+        .map(({ f, v, i }) =>
         [0, 1, 2, 3].map((k) => (
           <g key={`${f}d${k}`}>
             <circle cx={XS[k]} cy={Y(v[k])} r={36} fill={FAM[f].color} stroke="currentColor" strokeWidth={10} />
@@ -1489,38 +1500,45 @@ function FlipCallouts() {
   const sm = (f: Fam, k: number) => famAvg(f, (m) => m.sub[k])
   const box = (head: ReactNode, body: ReactNode) => (
     <div
-      className="flex flex-col"
+      className="flex"
       style={{
         ...ON_WHITE,
         background: '#f4efe6',
         border: '10px solid #141414',
-        padding: '26px 36px 30px',
-        gap: 14,
+        padding: '26px 40px 30px',
+        gap: 40,
+        flexDirection: 'row',
+        alignItems: 'center',
       }}
     >
-      <div>{head}</div>
-      <div className="font-body font-semibold text-ink" style={{ fontSize: 62, lineHeight: 1.2 }}>
+      <div className="shrink-0">{head}</div>
+      <div className="font-body font-semibold text-ink" style={{ fontSize: 120, lineHeight: 1.15 }}>
         {body}
       </div>
     </div>
   )
   return (
-    <div className="flex flex-1 flex-col justify-between" style={{ minWidth: 0 }}>
+    <div className="flex flex-col" style={{ minWidth: 0, gap: 40, marginTop: 150 }}>
       {box(
-        <SubsetChip code="S+" />,
+        <SubsetChip code="S+" size={96} />,
         <>
           <b>Supervised lead:</b> {sm('sup', 0).toFixed(1)} vs. {sm('mllm', 0).toFixed(1)} for MLLMs
         </>,
       )}
       {box(
-        <SubsetChip code="S−" />,
+        <SubsetChip code="S−" size={96} />,
         <>
           <b>MLLMs lead:</b> {sm('mllm', 1).toFixed(1)} vs. {sm('sup', 1).toFixed(1)} for supervised: the ranking flips
         </>,
       )}
       {box(
-        <span className="font-mono font-bold text-ink" style={{ fontSize: 58 }}>
-          S+ → S−
+        <span className="flex items-center" style={{ gap: 22 }}>
+          <SubsetChip code="S+" size={96} />
+          <svg width={110} height={60} viewBox="0 0 110 60" style={{ display: 'block' }}>
+            <path d="M 4 30 H 84" stroke={INKV} strokeWidth={12} strokeLinecap="butt" fill="none" />
+            <polygon points="104,30 78,8 78,52" fill={INKV} />
+          </svg>
+          <SubsetChip code="S−" size={96} />
         </span>,
         <>
           supervised models lose <b>{(sm('sup', 0) - sm('sup', 1)).toFixed(0)} pp</b>, MLLMs only <b>{(sm('mllm', 0) - sm('mllm', 1)).toFixed(0)} pp</b>
@@ -1546,33 +1564,32 @@ function AccuracyCard() {
   return (
     <div className="absolute flex flex-col" style={{ left: 120, right: 120, top: 90, bottom: 80, gap: 40 }}>
       {/* narrower than the card, so it stays clear of the (ii) / #10 chips while it sits near the top edge */}
-      <Prose style={{ maxWidth: 3500 }}>We measure ReaL accuracy (Beyer et al., 2020).</Prose>
-      <Prose style={{ maxWidth: 3500, marginBottom: 50 }}>
+      <Prose style={{ fontSize: 120 }}>We measure ReaL accuracy (Beyer et al., 2020).</Prose>
+      <Prose style={{ fontSize: 120, marginBottom: 50 }}>
         MLLMs gain +5–6 pp, supervised models +0.2–1.3:
         <br />
         models less reliant on supervised ImageNet labels are more sensitive to label quality.
       </Prose>
       <FamLegend
+        size={80}
         extra={
           <span className="flex items-center" style={{ gap: 44 }}>
             <span className="flex items-center" style={{ gap: 18 }}>
-              {ring('#fff', 60)} ImGT
+              {ring('#fff', 80)} ImGT
             </span>
             <span className="flex items-center" style={{ gap: 18 }}>
-              {ring('#8a8781', 68)} ReGT
+              {ring('#8a8781', 88)} ReGT
             </span>
           </span>
         }
       />
       <AccDumbbell />
-      <Prose style={{ marginTop: 50 }}>
-        Where ImGT is wrong (<SubsetChip code="S−" />, <SubsetChip code="M−" />
+      <Prose style={{ fontSize: 120, marginTop: 50, marginBottom: 60 }}>
+        Where ImGT is wrong (<SubsetChip code="S−" size={96} />, <SubsetChip code="M−" size={96} />
         ), all families drop to 30–47%.
       </Prose>
-      <div className="flex items-stretch" style={{ marginTop: 40, gap: 60 }}>
-        <SubsetSlope />
-        <FlipCallouts />
-      </div>
+      <SubsetSlope />
+      <FlipCallouts />
     </div>
   )
 }
@@ -1587,143 +1604,26 @@ const ATTR_ROWS = [
   { name: 'none', n: '29,059', color: '#5d5a55' },
 ]
 
-/* Δ accuracy vs. S per attribute: one row per attribute, one lane per model family.
-   dots = single models, tick = family mean (also printed in the right-hand column). */
-/* outliers worth naming: 'above' sits over the dot, 'below' under it (where the row above/left is crowded) */
-const STRIP_LABELS: Record<string, 'above' | 'below'> = {
-  'EfficientNetV2:2': 'below',
-  'Qwen3-VL:3': 'above',
-  'EfficientNetV2:3': 'above',
-}
+/* Δ accuracy vs. S on the images with the attribute, family means only: three tiles under the attribute's example */
+const STAT_MAX = 15
+const statFill = (v: number) => `color-mix(in srgb, ${v >= 0 ? GREEN : RED} ${Math.round(18 + Math.min(Math.abs(v) / STAT_MAX, 1) * 72)}%, #fff)`
 
-function AttrStrip() {
-  const W0 = 3060
-  const PL = 700,
-    PR = 2700,
-    D0 = -12,
-    D1 = 17
-  const X = (v: number) => PL + ((v - D0) / (D1 - D0)) * (PR - PL)
-  const rows = ATTR_ROWS.slice(0, 4)
-  const ROWH = 430,
-    LANE = 104,
-    LANE0 = 88
-  const plotH = rows.length * ROWH
-  const H0 = plotH + 230
+function AttrStats({ g }: { g: number }) {
   return (
-    <svg className="text-ink" width={W0} height={H0} style={{ display: 'block', overflow: 'visible' }}>
-      {rows.map((a, g) => (
-        <g key={a.name}>
-          {g % 2 === 0 && <rect x={-20} y={g * ROWH} width={W0 + 40} height={ROWH} fill="currentColor" fillOpacity={0.05} />}
-          <rect x={0} y={g * ROWH + 120} width={a.name.length * 62 * MONO_CH + 76} height={104} fill={a.color} />
-          <text x={38} y={g * ROWH + 172} dominantBaseline="central" className="font-mono font-semibold" fill="#fff" fontSize={62}>
-            {a.name}
-          </text>
-          <text x={0} y={g * ROWH + 270} dominantBaseline="central" className="font-mono font-semibold" fill="currentColor" fillOpacity={0.75} fontSize={52}>
-            {a.n} images
-          </text>
-        </g>
-      ))}
-      {[-10, -5, 5, 10, 15].map((v) => (
-        <line key={v} x1={X(v)} y1={0} x2={X(v)} y2={plotH} stroke="currentColor" strokeOpacity={0.16} strokeWidth={5} strokeDasharray="18 18" />
-      ))}
-      <text x={W0} y={-34} textAnchor="end" className="font-mono font-semibold" fill="currentColor" fontSize={52}>
-        family mean
-      </text>
-      {rows.map((a, g) =>
-        FAMS.map((f, k) => {
-          const cy = g * ROWH + LANE0 + 32 + k * LANE
-          const vals = famRows(f).map((m) => ({ v: m.attr[g], name: m.name }))
-          const mean = avg(vals.map((d) => d.v))
-          return (
-            <g key={`${a.name}${f}`}>
-              <line x1={X(0)} y1={cy} x2={X(mean)} y2={cy} stroke={FAM[f].color} strokeWidth={14} strokeLinecap="butt" />
-              {vals.map((d, i) => (
-                <circle key={i} cx={X(d.v)} cy={cy} r={29} fill={FAM[f].color} stroke="currentColor" strokeWidth={8} />
-              ))}
-              <line x1={X(mean)} y1={cy - 48} x2={X(mean)} y2={cy + 48} stroke="currentColor" strokeWidth={26} />
-              <line x1={X(mean)} y1={cy - 48} x2={X(mean)} y2={cy + 48} stroke={mean >= 0 ? GREEN : RED} strokeWidth={14} />
-              {vals.map((d, i) =>
-                STRIP_LABELS[`${d.name}:${g}`] ? (
-                  <text
-                    key={`l${i}`}
-                    x={STRIP_LABELS[`${d.name}:${g}`] === 'below' ? X(d.v) - 30 : X(d.v)}
-                    y={STRIP_LABELS[`${d.name}:${g}`] === 'below' ? cy + 128 : cy - 46}
-                    textAnchor={d.v < 0 && STRIP_LABELS[`${d.name}:${g}`] === 'above' ? 'end' : 'start'}
-                    className="font-body font-semibold"
-                    fill="currentColor"
-                    fontSize={50}
-                  >
-                    {d.name} {signed(d.v)}
-                  </text>
-                ) : null,
-              )}
-              <text x={W0} y={cy} textAnchor="end" dominantBaseline="central" className="font-mono font-bold" fill={mean >= 0 ? GREEN : RED} fontSize={70}>
-                {signed(mean)}
-              </text>
-            </g>
-          )
-        }),
-      )}
-      <line x1={X(0)} y1={0} x2={X(0)} y2={plotH} stroke="currentColor" strokeWidth={8} />
-      <line x1={PL - 10} y1={plotH + 12} x2={PR + 10} y2={plotH + 12} stroke="currentColor" strokeWidth={9} />
-      {[-10, -5, 0, 5, 10, 15].map((v) => (
-        <text key={v} x={X(v)} y={plotH + 88} textAnchor="middle" className="font-mono" fill="currentColor" fontSize={58}>
-          {signed(v, 0)}
-        </text>
-      ))}
-      <text x={W0 / 2} y={plotH + 176} textAnchor="middle" className="font-body font-semibold" fill="currentColor" fontSize={56}>
-        Accuracy change on images with the attribute, relative to all single-label images S (percentage points)
-      </text>
-    </svg>
-  )
-}
-
-function AttributeCard() {
-  return (
-    <div className="absolute flex flex-col" style={{ left: 120, right: 120, top: 100, gap: 70 }}>
-      {/* legend rides near the top edge; the plot keeps its place (extra space below the legend) */}
-      <FamLegend
-        extra={
-          <span className="flex items-center font-mono font-semibold" style={{ gap: 18, fontSize: 52 }}>
-            <span
-              className="inline-block"
-              style={{
-                width: 36,
-                height: 36,
-                borderRadius: '50%',
-                background: '#8a8781',
-                border: `7px solid ${INKV}`,
-              }}
-            />
-            model
-            <span
-              className="inline-block"
-              style={{
-                width: 16,
-                height: 48,
-                background: GREEN,
-                border: `4px solid ${INKV}`,
-                marginLeft: 24,
-              }}
-            />
-            <span
-              className="inline-block"
-              style={{
-                width: 16,
-                height: 48,
-                background: RED,
-                border: `4px solid ${INKV}`,
-                marginLeft: -6,
-              }}
-            />
-            family mean: gain / loss
-          </span>
-        }
-      />
-      <div style={{ marginTop: 170 }}>
-        <AttrStrip />
-      </div>
-      <Prose style={{ marginTop: 90 }}>Text: language-aligned models read it (MLLMs +12 pp), supervised ones mostly cannot. Renditions hurt every family, supervised models most.</Prose>
+    <div className="flex items-stretch" style={{ gap: 20, marginTop: 14 }}>
+      {FAMS.map((f) => {
+        const mean = avg(famRows(f).map((m) => m.attr[g]))
+        return (
+          <div key={f} className="flex flex-1 flex-col items-center" style={{ background: statFill(mean), border: `6px solid ${INK}`, padding: '14px 0 10px', gap: 0 }}>
+            <span className="font-mono font-semibold" style={{ color: INK, fontSize: 50, lineHeight: 1.1 }}>
+              {FAM[f].name}
+            </span>
+            <span className="font-mono font-bold" style={{ color: INK, fontSize: 104, lineHeight: 1.1 }}>
+              {signed(mean)}
+            </span>
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -1739,7 +1639,7 @@ const CROP_COLS = [
 
 /* tiny protocol glyph: an image with a big and a small object box; what gets classified is filled */
 function CropGlyph({ k, cx, y }: { k: number; cx: number; y: number }) {
-  const S = 1.6 // glyph scale (strokes scale with it)
+  const S = 1.8 // glyph scale (strokes scale with it)
   const W = 200,
     H = 150
   const on = 'rgba(20,20,20,0.32)'
@@ -1756,12 +1656,12 @@ function CropGlyph({ k, cx, y }: { k: number; cx: number; y: number }) {
       <rect {...{ x: A.x, y: A.y, width: A.w, height: A.h }} fill={fillA} stroke={INK} strokeWidth={k === 0 || k === 4 ? 4 : 8} />
       <rect {...{ x: B.x, y: B.y, width: B.w, height: B.h }} fill={fillB} stroke={INK} strokeWidth={k === 0 || k === 1 ? 4 : 8} />
       {k === 2 && (
-        <text x={W / 2} y={H + 6} textAnchor="middle" dominantBaseline="hanging" className="font-mono font-bold" fill="currentColor" fontSize={34}>
+        <text x={W / 2} y={H + 6} textAnchor="middle" dominantBaseline="hanging" className="font-mono font-bold" fill="currentColor" fontSize={42}>
           ≥1 right
         </text>
       )}
       {k === 4 && (
-        <text x={W / 2} y={H + 6} textAnchor="middle" dominantBaseline="hanging" className="font-mono font-bold" fill="currentColor" fontSize={34}>
+        <text x={W / 2} y={H + 6} textAnchor="middle" dominantBaseline="hanging" className="font-mono font-bold" fill="currentColor" fontSize={42}>
           1 per object
         </text>
       )}
@@ -1770,8 +1670,8 @@ function CropGlyph({ k, cx, y }: { k: number; cx: number; y: number }) {
 }
 
 function CropLines() {
-  const W0 = 3260
-  const XS = [330, 930, 1530, 2130, 2730]
+  const W0 = 3960
+  const XS = [480, 1230, 1980, 2730, 3480] // middle column = middle of the card (inner width 3960)
   const PT = 720,
     PB = 1530,
     D0 = 55,
@@ -1795,14 +1695,14 @@ function CropLines() {
     66,
   )
   return (
-    <svg className="text-ink" width={W0} height={H0} style={{ display: 'block', overflow: 'visible' }}>
+    <svg className="text-ink" width={W0} height={H0} style={{ display: 'block', overflow: 'visible', marginTop: 90 }}>
       {CROP_COLS.map((c, k) => (
         <g key={c.name}>
           <CropGlyph k={k} cx={XS[k]} y={0} />
-          <text x={XS[k]} y={430} textAnchor="middle" className="font-mono font-semibold" fill="currentColor" fontSize={68}>
+          <text x={XS[k]} y={455} textAnchor="middle" className="font-mono font-semibold" fill="currentColor" fontSize={84}>
             {c.name}
           </text>
-          <text x={XS[k]} y={498} textAnchor="middle" className="font-mono" fill="currentColor" fillOpacity={0.7} fontSize={50}>
+          <text x={XS[k]} y={535} textAnchor="middle" className="font-mono" fill="currentColor" fillOpacity={0.7} fontSize={62}>
             {c.n}
           </text>
           <line x1={XS[k]} y1={PT - 60} x2={XS[k]} y2={PB} stroke="currentColor" strokeOpacity={0.2} strokeWidth={7} />
@@ -1824,7 +1724,7 @@ function CropLines() {
         )
       })}
       {data.map(({ f, v }, i) => (
-        <g key={`l${f}`} className="font-mono font-semibold" fill="currentColor" fontSize={58}>
+        <g key={`l${f}`} className="font-mono font-semibold" fill="currentColor" fontSize={72}>
           <text x={XS[0] - 56} y={left[i]} textAnchor="end" dominantBaseline="central">
             {v[0].toFixed(1)}
           </text>
@@ -1849,108 +1749,71 @@ function CropLines() {
   )
 }
 
-function BoxRankBars() {
-  const W0 = 3260
-  const PL = 40,
-    PR = 3260,
-    PT = 70,
-    PB = 600,
-    D1 = 60
-  const H0 = PB + 100
-  const gw = (PR - PL) / 5
-  const BW = 150,
-    BG = 14
-  const Y = (v: number) => PB - (v / D1) * (PB - PT)
-  const ord = ['largest', '2nd', '3rd', '4th', '5th']
-  return (
-    <svg className="text-ink" width={W0} height={H0} style={{ display: 'block', overflow: 'visible' }}>
-      {ord.map((o, i) => {
-        const gx = PL + i * gw + (gw - (3 * BW + 2 * BG)) / 2
-        return (
-          <g key={o}>
-            {FAMS.map((f, k) => {
-              const v = famAvg(f, (m) => m.rank[i])
-              const x = gx + k * (BW + BG)
-              return (
-                <g key={f}>
-                  <rect x={x} y={Y(v)} width={BW} height={PB - Y(v)} fill={FAM[f].color} stroke="currentColor" strokeWidth={7} />
-                  <text x={x + BW / 2} y={Y(v) - 30} textAnchor="middle" className="font-mono font-semibold" fill="currentColor" fontSize={50}>
-                    {v.toFixed(0)}
-                  </text>
-                </g>
-              )
-            })}
-            <text x={PL + i * gw + gw / 2} y={PB + 76} textAnchor="middle" className="font-mono font-semibold" fill="currentColor" fontSize={58}>
-              {o}
-            </text>
-          </g>
-        )
-      })}
-      <line x1={PL} y1={PB} x2={PR} y2={PB} stroke="currentColor" strokeWidth={9} />
-    </svg>
-  )
-}
-
 const TASKS = ['classification', 'object crops', 'detection', 'localization', 'counting', 'explainability']
 
 function TasksCard() {
   return (
-    <div className="absolute flex flex-col" style={{ left: 120, right: 120, top: 100, gap: 30 }}>
-      {/* narrower than the card, so it stays clear of the (ii) / #12 chips while it sits near the top edge */}
-      <Prose style={{ maxWidth: 2480, marginBottom: 50 }}>Classification stays the default, as in ImageNet, now split per subset. The boxes make many other tasks possible:</Prose>
-      {/* 3 x 2 grid of equal chips: two full rows instead of five + one */}
-      <div className="grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)', gap: 24 }}>
+    <div className="absolute flex flex-col" style={{ left: 120, right: 120, top: 70, gap: 24 }}>
+      {/* text stays left of the #12 chip (top right) */}
+      {/* first sentence on a single row: fitted to the width left of the chip (max = the 120px body size) */}
+      <FitLine target={3560} max={120} className="font-body font-semibold text-ink" style={{ lineHeight: 1.25 }}>
+        Classification stays the default, as in ImageNet, <span className="font-bold">now split per subset</span>.
+      </FitLine>
+      <Prose style={{ fontSize: 120, marginTop: 12, marginBottom: 20 }}>The boxes make many other tasks possible:</Prose>
+      {/* comic-style task stickers: 2 x 3, hard shadow, slight tilts; the default task is highlighted */}
+      <div className="grid" style={{ gridTemplateColumns: 'repeat(2, 1fr)', gap: 30, marginTop: 0, paddingRight: 14 }}>
         {TASKS.map((t, i) => (
           <div
             key={t}
-            className="flex items-center bg-white font-mono font-semibold text-ink"
+            className="flex items-center font-mono font-bold text-ink"
             style={{
               ...ON_WHITE,
-              border: '10px solid #141414',
-              padding: '14px 24px 12px 24px',
-              gap: 22,
-              fontSize: 56,
+              background: i === 0 ? '#f4d85a' : '#fff',
+              border: '12px solid #141414',
+              boxShadow: '14px 14px 0 #141414',
+              transform: `rotate(${[-1.2, 1, 0.8, -1, -0.8, 1.2][i]}deg)`,
+              padding: '26px 36px 22px 32px',
+              gap: 34,
+              fontSize: 112,
+              lineHeight: 1.1,
               whiteSpace: 'nowrap',
             }}
           >
             <span
-              className="inline-flex items-center justify-center"
+              className="inline-flex shrink-0 items-center justify-center"
               style={{
-                width: 52,
-                height: 52,
-                border: '9px solid #141414',
+                width: 128,
+                height: 128,
+                border: '11px solid #141414',
+                borderRadius: '50%',
                 background: RED,
                 color: '#fff',
-                fontSize: 40,
+                fontSize: 88,
                 lineHeight: 1,
               }}
             >
               ✓
             </span>
             {t}
-            {i === 0 && <span className="text-ink/55">(default)</span>}
           </div>
         ))}
       </div>
-      <Prose style={{ marginTop: 40, marginBottom: 50 }}>One example, object-centric scoring on crops:</Prose>
+    </div>
+  )
+}
+
+/* ---------- Recognition on object crops (the plot half of the old card 12) ---------- */
+function CropsCard() {
+  return (
+    <div className="absolute flex flex-col" style={{ left: 120, right: 120, top: 100, gap: 30 }}>
+      <Prose style={{ fontSize: 120, marginBottom: 50 }}>Beyond full-image classification,<br />we also run the object crops recognition task, scored by five protocols:</Prose>
       <CropLines />
-      <FamLegend />
-      <Prose style={{ fontSize: 64, lineHeight: 1.2, marginTop: 70 }}>
+      <FamLegend size={80} />
+      <Prose style={{ fontSize: 120, marginTop: 70 }}>
         Any − Largest ≈ 11 pp: models often miss the largest object yet get a smaller one.
         <br />
         Without context (All), supervised models lose 29 pp, MLLMs 13.
       </Prose>
-      <div className="flex flex-col" style={{ gap: 10, marginTop: 70 }}>
-        <div className="font-body font-bold text-ink" style={{ fontSize: 86, lineHeight: 1.1 }}>
-          Models favor the largest object,
-          <br />
-          even though it is poorly recognized without context
-        </div>
-        <div className="font-body font-semibold text-ink" style={{ fontSize: 62, lineHeight: 1.2 }}>
-          Multilabel images: accuracy against the label of the i-th largest box
-        </div>
-      </div>
-      <BoxRankBars />
     </div>
   )
 }
@@ -1966,13 +1829,13 @@ const DERIVED = [
 ]
 
 function DerivedBars() {
-  const W0 = 3460
-  const PL = 620,
-    PR = 2330,
+  const W0 = 3960
+  const PL = 880,
+    PR = 2700,
     D1 = 16
   const X = (v: number) => PL + (v / D1) * (PR - PL)
-  const TOP = 110,
-    ROW = 232
+  const TOP = 140,
+    ROW = 260
   const H0 = TOP + DERIVED.length * ROW
   return (
     <svg className="text-ink" width={W0} height={H0} style={{ display: 'block', overflow: 'visible' }}>
@@ -1982,13 +1845,13 @@ function DerivedBars() {
           <rect width="14" height="30" fill="rgba(20,20,20,0.35)" />
         </pattern>
       </defs>
-      <text x={(PL + PR) / 2} y={40} textAnchor="middle" className="font-mono" fill="currentColor" fontSize={52}>
+      <text x={(PL + PR) / 2} y={60} textAnchor="middle" className="font-mono" fill="currentColor" fontSize={66}>
         estimated label error (%)
       </text>
-      <text x={2620} y={40} textAnchor="middle" className="font-mono" fill="currentColor" fontSize={52}>
+      <text x={3070} y={60} textAnchor="middle" className="font-mono" fill="currentColor" fontSize={66}>
         ratio
       </text>
-      <text x={W0} y={40} textAnchor="end" className="font-mono" fill="currentColor" fontSize={52}>
+      <text x={W0} y={60} textAnchor="end" className="font-mono" fill="currentColor" fontSize={66}>
         est. wrong
       </text>
       {DERIVED.map((d, i) => {
@@ -1996,21 +1859,21 @@ function DerivedBars() {
         return (
           <g key={d.name}>
             {i % 2 === 0 && <rect x={-20} y={y} width={W0 + 40} height={ROW} fill="currentColor" fillOpacity={0.05} />}
-            <text x={0} y={y + ROW / 2} dominantBaseline="central" className="font-body font-semibold" fill="currentColor" fontSize={64}>
+            <text x={0} y={y + ROW / 2} dominantBaseline="central" className="font-body font-semibold" fill="currentColor" fontSize={80}>
               {d.name}
             </text>
-            <rect x={PL} y={y + 34} width={X(d.a) - PL} height={66} fill="url(#dv-hatch)" stroke="currentColor" strokeWidth={6} />
-            <text x={X(d.a) + 22} y={y + 67} dominantBaseline="central" className="font-mono" fill="currentColor" fontSize={48}>
+            <rect x={PL} y={y + 36} width={X(d.a) - PL} height={72} fill="url(#dv-hatch)" stroke="currentColor" strokeWidth={6} />
+            <text x={X(d.a) + 22} y={y + 72} dominantBaseline="central" className="font-mono" fill="currentColor" fontSize={60}>
               {d.a.toFixed(1)}
             </text>
-            <rect x={PL} y={y + 112} width={X(d.b) - PL} height={86} fill={RED} stroke="currentColor" strokeWidth={7} />
-            <text x={X(d.b) + 22} y={y + 155} dominantBaseline="central" className="font-mono font-semibold" fill="currentColor" fontSize={56}>
+            <rect x={PL} y={y + 124} width={X(d.b) - PL} height={96} fill={RED} stroke="currentColor" strokeWidth={7} />
+            <text x={X(d.b) + 22} y={y + 172} dominantBaseline="central" className="font-mono font-semibold" fill="currentColor" fontSize={72}>
               {d.b.toFixed(1)}
             </text>
-            <text x={2620} y={y + ROW / 2} textAnchor="middle" dominantBaseline="central" className="font-mono font-bold" fill="currentColor" fontSize={78}>
+            <text x={3070} y={y + ROW / 2} textAnchor="middle" dominantBaseline="central" className="font-mono font-bold" fill="currentColor" fontSize={96}>
               ×{(d.b / d.a).toFixed(1)}
             </text>
-            <text x={W0} y={y + ROW / 2} textAnchor="end" dominantBaseline="central" className="font-body font-bold" fill="currentColor" fontSize={86}>
+            <text x={W0} y={y + ROW / 2} textAnchor="end" dominantBaseline="central" className="font-body font-bold" fill="currentColor" fontSize={104}>
               {d.n.toLocaleString('en-US')}
             </text>
           </g>
@@ -2024,34 +1887,39 @@ function DerivedBars() {
 function DerivedCard() {
   return (
     // text and plot stay together at the top; the take-away sits at the bottom
-    <div className="absolute flex flex-col" style={{ left: 120, right: 120, top: 80, gap: 50 }}>
+    <div className="absolute flex flex-col" style={{ left: 120, right: 120, top: 140, gap: 50 }}>
       <div className="flex flex-col" style={{ gap: 60 }}>
         <div className="flex flex-col" style={{ gap: 26 }}>
           {/* one phrase; kept clear of the (iii) / #13 chips on the right */}
-          <div className="font-body font-semibold text-ink" style={{ fontSize: 66, lineHeight: 1.2, maxWidth: 2700 }}>
-            <span className="font-bold">Empirical lower-bound estimate of annotation error,</span> from the answers two models with uncorrelated error patterns agree on, checked against <GtChip k="ReGT" size={58} />
+          <div className="whitespace-nowrap font-body font-semibold text-ink" style={{ fontSize: 120, lineHeight: 1.25 }}>
+            <div>
+              <span className="font-bold">Empirical lower-bound estimate of annotation error,</span> from the
+            </div>
+            <div>
+              answers two models with uncorrelated error patterns agree on <span className="font-mono font-bold">ReGT</span>
+            </div>
           </div>
-          <div className="flex flex-wrap items-center whitespace-nowrap font-mono font-semibold text-ink" style={{ columnGap: 60, rowGap: 12, fontSize: 54, marginTop: 56 }}>
+          <div className="flex flex-wrap items-center whitespace-nowrap font-mono font-semibold text-ink" style={{ columnGap: 60, rowGap: 16, fontSize: 70, marginTop: 110 }}>
             <span className="flex items-center" style={{ gap: 18 }}>
               <span
                 style={{
-                  width: 56,
-                  height: 56,
-                  border: `7px solid ${INKV}`,
+                  width: 72,
+                  height: 72,
+                  border: `8px solid ${INKV}`,
                   background: 'repeating-linear-gradient(45deg, rgba(20,20,20,0.35) 0 10px, #fff 10px 21px)',
                 }}
               />
               on ImageNet-1k (same classes as the benchmark subset)
             </span>
             <span className="flex items-center" style={{ gap: 18 }}>
-              <span style={{ width: 56, height: 56, border: `7px solid ${INKV}`, background: RED }} />
+              <span style={{ width: 72, height: 72, border: `8px solid ${INKV}`, background: RED }} />
               on the benchmark
             </span>
           </div>
         </div>
         <DerivedBars />
       </div>
-      <Prose style={{ marginTop: 110 }}>Adopting the ImageNet-1k class structure on newly collected images brings the same problems with the classes, and hence with correct image-label pair collection and annotation.</Prose>
+      <Prose style={{ fontSize: 120, marginTop: 110 }}>Adopting the ImageNet-1k class structure on newly collected images brings the same problems with the classes, and hence with correct image-label pair collection and annotation.</Prose>
     </div>
   )
 }
@@ -2233,42 +2101,35 @@ const EXAMPLES: { src: string; tag: string; ok: boolean; imgt: string; regt: str
 
 function ExampleCell({ e, h }: { e: (typeof EXAMPLES)[number]; h: number }) {
   return (
-    <div className="flex min-w-0 flex-col" style={{ gap: 22 }}>
-      <img src={asset(e.src)} alt={e.regt} className="block self-start" style={{ height: h, width: 'auto', outline: `10px solid ${INKV}`, outlineOffset: -10 }} />
-      <span className="self-start font-mono font-semibold text-white" style={{ background: e.ok ? '#7d9a58' : RED, padding: '8px 26px 4px', fontSize: 50 }}>
-        {e.tag}
-      </span>
-      <div className="flex items-baseline" style={{ gap: 26 }}>
-        <GtChip k="ImGT" />
-        <span className="font-body font-bold text-ink" style={{ fontSize: 62, lineHeight: 1.15 }}>
-          <span style={{ textDecoration: e.ok ? 'none' : `line-through ${RED} 9px` }}>{e.imgt}</span> <span style={{ color: e.ok ? GREEN : RED }}>{e.ok ? '✓' : '✗'}</span>
+    <div className="flex min-w-0 flex-col" style={{ gap: 40 }}>
+      <img src={asset(e.src)} alt={e.regt} className="block shrink-0 self-start" style={{ height: h, width: 'auto', outline: `10px solid ${INKV}`, outlineOffset: -10 }} />
+      <div className="flex min-w-0 flex-col" style={{ gap: 28 }}>
+        <span className="self-start font-mono font-semibold text-white" style={{ background: e.ok ? '#7d9a58' : RED, padding: '8px 26px 4px', fontSize: 50 }}>
+          {e.tag}
         </span>
-      </div>
-      <div className="flex items-baseline" style={{ gap: 26 }}>
-        <GtChip k="ReGT" />
-        <span className="font-body font-bold text-ink" style={{ fontSize: 58, lineHeight: 1.2 }}>
-          {e.regt}
-        </span>
+        <div className="flex items-baseline" style={{ gap: 26 }}>
+          <GtChip k="ImGT" />
+          <span className="font-body font-bold text-ink" style={{ fontSize: 62, lineHeight: 1.15 }}>
+            <span style={{ textDecoration: e.ok ? 'none' : `line-through ${RED} 9px` }}>{e.imgt}</span> <span style={{ color: e.ok ? GREEN : RED }}>{e.ok ? '✓' : '✗'}</span>
+          </span>
+        </div>
+        <div className="flex items-baseline" style={{ gap: 26 }}>
+          <GtChip k="ReGT" />
+          <span className="font-body font-bold text-ink" style={{ fontSize: 58, lineHeight: 1.2 }}>
+            {e.regt}
+          </span>
+        </div>
       </div>
     </div>
   )
 }
 
-/* 2 x 2: left column the narrow photos (desk, pier), right column the wide ones */
+/* teaser: two big examples (barbershop = incomplete, pier = wrong), stacked, text beside each photo */
 function ExamplesCard() {
-  const H = 1000
   return (
-    <div className="absolute flex justify-between" style={{ left: 110, right: 110, top: 270, bottom: 80, gap: 70 }}>
-      {[
-        [EXAMPLES[0], EXAMPLES[2]],
-        [EXAMPLES[1], EXAMPLES[3]],
-      ].map((col, i) => (
-        <div key={i} className="flex flex-col justify-between" style={{ width: i ? 1502 : 882 }}>
-          {col.map((e) => (
-            <ExampleCell key={e.src} e={e} h={H} />
-          ))}
-        </div>
-      ))}
+    <div className="absolute flex items-center justify-between" style={{ left: 110, right: 110, top: 290, bottom: 100 }}>
+      <ExampleCell e={EXAMPLES[1]} h={1400} />
+      <ExampleCell e={EXAMPLES[2]} h={1400} />
     </div>
   )
 }
@@ -2416,6 +2277,7 @@ function Panel({ id, children }: { id: PanelId; children?: ReactNode }) {
   const nn = m.seed ?? (typeof m.n === 'number' ? m.n : 5)
   const t = tiltFor(nn)
   const rz = ROT[id] ?? t.rz
+  const sc = SCALE[id] ?? 1
   return (
     <section
       className="absolute"
@@ -2456,7 +2318,13 @@ function Panel({ id, children }: { id: PanelId; children?: ReactNode }) {
       <Corner color={color} x="r" y="b" />
       {children ? (
         // dark cards: everything drawn in theme ink turns light (white chips reset it)
-        <div className="contents" style={variant === 'dark' ? ({ '--color-ink': '#f4efe6' } as CSSProperties) : undefined}>
+        <div
+          className={sc === 1 ? 'contents' : 'absolute'}
+          style={{
+            ...(sc === 1 ? {} : { left: 0, top: 0, width: w / sc, height: h / sc, transform: `scale(${sc})`, transformOrigin: '0 0' }),
+            ...(variant === 'dark' ? ({ '--color-ink': '#f4efe6' } as CSSProperties) : {}),
+          }}
+        >
           {children}
         </div>
       ) : (
@@ -2468,7 +2336,7 @@ function Panel({ id, children }: { id: PanelId; children?: ReactNode }) {
 
 /* ---------- Title card: annotated object ---------- */
 const BOX_W = 7300 // wider than the text block on purpose: the text is sized from CONTENT_W, so the rest is margin
-const BOX_H = 5400
+const BOX_H = 5000
 const BOX = { l: 60, r: 60, t: 190, b: 230 }
 const TITLE_ROT = -1.2
 const LOGO_H = 380 // credential logos, bottom right corner of the poster
@@ -2525,7 +2393,7 @@ function AttrChip({ label, checked = true }: { label: string; checked?: boolean 
 
 /* Text that scales itself so its natural width equals `target` px (capped by `max`).
    Measures the real loaded font, so it fills the card whichever font is in use. */
-function FitLine({ children, target, max, className, style }: { children: string; target: number; max: number; className?: string; style?: CSSProperties }) {
+function FitLine({ children, target, max, className, style }: { children: ReactNode; target: number; max: number; className?: string; style?: CSSProperties }) {
   const probe = useRef<HTMLSpanElement>(null)
   const [size, setSize] = useState(max)
   useLayoutEffect(() => {
@@ -2625,7 +2493,7 @@ function TitleBlock() {
 
       <div className="absolute flex flex-col items-center justify-center text-center" style={{ left: BOX.l + 86, right: BOX.r + 86, top: BOX.t + 86, bottom: BOX.b + 86 }}>
         <FitLine
-          target={CONTENT_W - 500}
+          target={CONTENT_W - 795}
           max={800}
           className="font-display text-ink"
           style={{
@@ -2638,7 +2506,7 @@ function TitleBlock() {
           DOOMED TO RE-ANNOTATE,
         </FitLine>
         <FitLine
-          target={CONTENT_W - 1600}
+          target={CONTENT_W - 1840}
           max={1100}
           className="font-display"
           style={{
@@ -2658,7 +2526,7 @@ function TitleBlock() {
             transform: 'skewX(-6deg) rotate(-1deg)',
           }}
         >
-          <FitLine target={CONTENT_W - 700} max={560} style={{ lineHeight: 1, letterSpacing: '0.015em' }}>
+          <FitLine target={CONTENT_W - 985} max={560} style={{ lineHeight: 1, letterSpacing: '0.015em' }}>
             The ImageNet Story
           </FitLine>
         </div>
@@ -2670,7 +2538,7 @@ function TitleBlock() {
             border: '20px solid #141414',
             boxShadow: '26px 26px 0 #141414',
             padding: '90px 50px 60px',
-            marginTop: 190,
+            marginTop: 180,
             transform: 'rotate(-0.8deg)',
           }}
         >
@@ -2688,10 +2556,10 @@ function TitleBlock() {
           >
             TL;DR
           </div>
-          <FitLine target={CONTENT_W - 500} max={200} className="font-body font-semibold text-ink" style={{ lineHeight: 1.2 }}>
+          <FitLine target={CONTENT_W - 795} max={200} className="font-body font-semibold text-ink" style={{ lineHeight: 1.2 }}>
             We reannotated the whole ImageNet-1k validation set:
           </FitLine>
-          <div className="flex items-stretch" style={{ width: CONTENT_W - 300, marginTop: 50 }}>
+          <div className="flex items-stretch" style={{ width: CONTENT_W - 600, marginTop: 45 }}>
             {(
               [
                 ['≈12%', ['of the original ImageNet-1k', 'labels are incorrect']],
@@ -2707,10 +2575,10 @@ function TitleBlock() {
                   padding: '0 40px',
                 }}
               >
-                <div className="font-display italic" style={{ fontSize: 420, lineHeight: 1, letterSpacing: '0.01em', color: INK }}>
+                <div className="font-display italic" style={{ fontSize: 400, lineHeight: 1, letterSpacing: '0.01em', color: INK }}>
                   {num}
                 </div>
-                <div className="font-body font-semibold text-ink" style={{ fontSize: 84, lineHeight: 1.15, whiteSpace: 'nowrap', marginTop: 10 }}>
+                <div className="font-body font-semibold text-ink" style={{ fontSize: 80, lineHeight: 1.15, whiteSpace: 'nowrap', marginTop: 10 }}>
                   {lines.map((l) => (
                     <div key={l}>{l}</div>
                   ))}
@@ -2719,10 +2587,10 @@ function TitleBlock() {
             ))}
           </div>
         </div>
-        <FitLine target={CONTENT_W - 450} max={150} className="font-mono font-semibold text-ink" style={{ marginTop: 200, lineHeight: 1.3 }}>
+        <FitLine target={CONTENT_W - 750} max={142} className="font-mono font-semibold text-ink" style={{ marginTop: 185, lineHeight: 1.3 }}>
           Illia Volkov · Nikita Kisel · Tetiana Mishkina · Klara Janouskova · Jiri Matas
         </FitLine>
-        <FitLine target={CONTENT_W - 700} max={112} className="font-mono text-ink/80" style={{ marginTop: 40, lineHeight: 1.3 }}>
+        <FitLine target={CONTENT_W - 985} max={106} className="font-mono text-ink/80" style={{ marginTop: 38, lineHeight: 1.3 }}>
           Visual Recognition Group · Czech Technical University in Prague
         </FitLine>
       </div>
@@ -2934,44 +2802,58 @@ function Poster() {
       <Panel id="QR">
         <LinkCard />
       </Panel>
-      <Panel id="A2">
-        <div className="absolute flex flex-col" style={{ left: 110, right: 110, top: 260, bottom: 80, gap: 44 }}>
-          <div className="flex" style={{ gap: 60 }}>
-            <AttrCell name="rendition" color={ATTR.rendition} src="attr-rendition-piano.jpg" text="Toy, drawing or other stylized depiction" />
-            <AttrCell name="crowd" color={ATTR.crowd} src="attr-crowd-flamingo.jpg" pos="center bottom" text="5+ instances of one class, collapsed into a single box" />
-          </div>
-          <div className="flex" style={{ gap: 60 }}>
-            <AttrCell name="text-recognition" color={ATTR.text} src="attr-text-theater.jpg" text="Class is only recognizable by reading the text" />
-            <AttrCell name="reflection" color={ATTR.reflection} src="attr-reflection-mau.jpg" text="Object seen in a mirror or water surface" />
-          </div>
-          <div className="flex flex-col" style={{ gap: 18 }}>
-            <div className="flex items-start" style={{ gap: 60 }}>
-              <div className="flex flex-1 justify-center">
-                <ExampleImg src="attr-dominant-terriers.jpg" height={720} tag="both dominant" />
-              </div>
-              <div className="flex flex-1 justify-center">
-                <ExampleImg src="attr-notdominant-cap.jpg" height={720} tag="not dominant" />
-              </div>
-            </div>
-            <AttrNote name="dominant" color={ATTR.dominant} text="Noticed immediately: a judgment, not a matter of size" />
-          </div>
-        </div>
-      </Panel>
       {/* scattered pile: method + results, in reading order */}
       <Panel id="M1">
         <PipelineCard />
       </Panel>
+      <Panel id="A2">
+        <div className="absolute flex flex-col justify-between" style={{ left: 130, right: 130, top: 270, bottom: 110 }}>
+          <div className="font-body font-semibold text-ink" style={{ fontSize: 56, lineHeight: 1.15, opacity: 0.85 }}>
+            Tiles: accuracy change on images with the attribute vs. all single-label images S, in pp (family mean)
+          </div>
+          <div className="flex" style={{ gap: 70 }}>
+            <AttrCell name="rendition" color={ATTR.rendition} src="attr-rendition-piano.jpg" stat={2} text="Toy, drawing or other stylized depiction" />
+            <AttrCell name="crowd" color={ATTR.crowd} src="attr-crowd-flamingo.jpg" pos="center bottom" stat={0} text="5+ instances of one class, collapsed into a single box" />
+            <AttrCell name="text-recognition" color={ATTR.text} src="attr-text-theater.jpg" stat={3} text="Class is only recognizable by reading the text" />
+          </div>
+          <div className="flex" style={{ gap: 70 }}>
+            <AttrCell name="reflection" color={ATTR.reflection} src="attr-reflection-mau.jpg" stat={1} text="Object seen in a mirror or water surface" />
+            <div className="flex min-w-0 flex-1 flex-col" style={{ gap: 18 }}>
+              <div className="flex" style={{ gap: 20 }}>
+                {[
+                  ['attr-dominant-terriers.jpg', 'both dominant'],
+                  ['attr-notdominant-cap.jpg', 'not dominant'],
+                ].map(([src, tag]) => (
+                  <div key={src} className="flex min-w-0 flex-1 flex-col items-center" style={{ gap: 10 }}>
+                    <div className="w-full" style={{ aspectRatio: '4 / 3', overflow: 'hidden' }}>
+                      <img src={asset(src)} alt="" className="block h-full w-full" style={{ objectFit: 'cover' }} />
+                    </div>
+                    <div className="whitespace-nowrap font-mono font-semibold text-ink" style={{ fontSize: 52 }}>
+                      {tag}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <AttrNote name="dominant" color={ATTR.dominant} text="Noticed immediately: a judgment, not a matter of size" />
+            </div>
+            <div className="flex min-w-0 flex-1 items-center">
+              <Prose style={{ fontSize: 66 }}>Text: language-aligned models read it (MLLMs +12 pp), supervised ones mostly cannot. Renditions hurt every family, supervised models most.</Prose>
+            </div>
+          </div>
+        </div>
+      </Panel>
+      {/* scattered pile: method + results, in reading order */}
       <Panel id="M2">
         <ExamplesCard />
       </Panel>
       <Panel id="M3">
         <AccuracyCard />
       </Panel>
-      <Panel id="M4">
-        <AttributeCard />
-      </Panel>
       <Panel id="M5">
         <TasksCard />
+      </Panel>
+      <Panel id="M8">
+        <CropsCard />
       </Panel>
       <Panel id="M6">
         <ClassesCard />
