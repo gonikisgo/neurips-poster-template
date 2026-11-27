@@ -31,7 +31,7 @@ const R = {
   // top band: left stack (revised classes, examples), title in the middle, right: splits, distribution, link
   C: [14000, 2730, 5556, 2650],
   QR: [14000, 320, 5556, 2000],
-  B: [17400, 5900, 2200, 1940], // parked next to card 12 for now (overlaps it)
+  B: [14830, 8230, 2200, 1816], // card 4, left of card 11 (between cards 9 and 11)
   M2: [320, 320, 5560, 2100],
   M6: [320, 2730, 5600, 2300], // revised classes + prior reannotations, fills the gap between M2 and A2
   // bottom band, under the title, full width, story left to right: 9 attributes -> 10 accuracy -> 12 tasks -> 13 derived -> 15 iterative -> 16 recommendations.
@@ -40,11 +40,11 @@ const R = {
   M1: [320, 9600, 5700, 2800],
   M3: [6153, 7240, 4200, 5160],
   M5: [6153, 5700, 4200, 1300],
-  M8: [10463, 5700, 4200, 3120],
-  M7: [10463, 9100, 4300, 3300],
-  M9: [14800, 7790, 4700, 2350],
-  M10: [14780, 5700, 5000, 1900],
-  M11: [14800, 10550, 4700, 1300], // card 12, MLLM vs. trained annotators (split off card 11)
+  M8: [10463, 5600, 4200, 3120],
+  M7: [10463, 9000, 4300, 3300],
+  M9: [14990, 5700, 4700, 2220],
+  M10: [14960, 10430, 4600, 1300],
+  M11: [17140, 8230, 2550, 1816], // card 12, MLLM vs. trained annotators (split off card 11)
 } as const satisfies Record<string, readonly [number, number, number, number]>
 type PanelId = keyof typeof R
 
@@ -80,8 +80,9 @@ type Variant = 'gray' | 'flat' | 'yellow' | 'white' | 'dark'
 
 /* What each block is for. Numbers are reading order; hint = which part of the paper fits here. */
 /* n = reading-order chip (omitted -> no chip); seed = keeps a card's tilt fixed when its number changes.
-   Reading order: 1 What reannotation fixes, 2 Class problems, 3 Image splits, 4 Labels & boxes, then the bottom story
-   5 Attributes, 6 Annotation pipeline, 7 One benchmark, 8 Accuracy on ReGT, 9 Object crops, 10 Derived benchmarks, 11 Iterative, 12 Recommendations */
+   Reading order: 1 What reannotation fixes, 2 Class problems, 3 Image splits, then the bottom story
+   4 Attributes, 5 Annotation pipeline, 6 One benchmark, 7 Accuracy on ReGT, 8 Object crops, 9 Derived benchmarks,
+   10 Labels & boxes, 11 Annotation is iterative, 12 MLLM vs. annotators, 13 Recommendations */
 const META: Record<
   PanelId,
   {
@@ -96,7 +97,7 @@ const META: Record<
   }
 > = {
   B: {
-    n: 4,
+    n: 10,
     seed: 5,
     title: 'Labels & boxes',
     group: 'results',
@@ -104,21 +105,21 @@ const META: Record<
   },
   C: { n: 3, title: 'Image splits', group: 'method', variant: 'flat' },
   QR: { n: 'LINK', title: 'Dataset, tool & community', group: 'link', variant: 'white' },
-  A2: { n: 5, seed: 9, title: 'Attributes', group: 'method', variant: 'dark' },
+  A2: { n: 4, seed: 9, title: 'Attributes', group: 'method', variant: 'dark' },
   M1: {
-    n: 6,
+    n: 5,
     seed: 7,
     title: 'Annotation pipeline',
     group: 'method',
     hint: 'Train annotators → class groups → per-image labels → verification',
   },
   M2: { n: 1, seed: 4, title: 'What reannotation fixes', group: 'results', variant: 'dark' },
-  M3: { n: 8, seed: 10, title: 'Accuracy on ReGT', group: 'results', variant: 'white' },
-  M5: { n: 7, seed: 12, title: 'One benchmark, many tasks', group: 'results' },
-  M8: { n: 9, seed: 13, title: 'Recognition on object crops', group: 'results' },
+  M3: { n: 7, seed: 10, title: 'Accuracy on ReGT', group: 'results', variant: 'white' },
+  M5: { n: 6, seed: 12, title: 'One benchmark, many tasks', group: 'results' },
+  M8: { n: 8, seed: 13, title: 'Recognition on object crops', group: 'results' },
   M6: { n: 2, seed: 7, title: 'Class problems & multi-label images', group: 'method' },
   M7: {
-    n: 10,
+    n: 9,
     seed: 14,
     title: 'Errors in derived benchmarks',
     group: 'results',
@@ -131,7 +132,7 @@ const META: Record<
     group: 'method',
     variant: 'dark',
   },
-  M11: { n: 12, seed: 17, title: 'MLLM vs. trained annotators', group: 'method', variant: 'dark' },
+  M11: { n: 12, seed: 17, title: 'MLLM vs. annotators', group: 'method', variant: 'gray' },
   M10: { n: 13, seed: 16, title: 'Recommendations', group: 'takeaway', variant: 'white' },
 }
 
@@ -280,11 +281,11 @@ function QrCode({ qr, logo, size, color = INK }: { qr: string; logo: string; siz
 }
 
 /* Link panel: one QR to a single landing page, plus what is waiting there (the page itself is still being built) */
-const LINK_ITEMS: { name: string; text?: string; logo?: string; note?: string }[] = [
+const LINK_ITEMS: { name: string; text?: string; logo?: string; note?: ReactNode }[] = [
   {
     name: 'Annotation forum',
     text: 'discuss & add your annotations',
-    note: 'No dataset is ever perfect, so ours is not static: community feedback keeps it growing.',
+    note: <>No dataset is ever perfect, so ours is not static:<br />community feedback keeps it growing.</>,
   },
   { name: 'Project page' },
   { name: 'Dataset', logo: 'logo-hf.png' },
@@ -307,18 +308,20 @@ function LinkCard() {
                   –
                 </span>
                 <span
-                  className="font-mono font-bold uppercase text-white"
+                  className="inline-flex items-center font-mono font-bold uppercase text-white"
                   style={{
                     background: GROUP.link.color,
                     padding: '8px 36px 4px',
                     marginRight: 40,
                     fontSize: 100,
                     letterSpacing: 4,
+                    gap: 30,
                   }}
                 >
                   {name}
+                  {/* logo lives inside the highlighted block */}
+                  {logo && <img src={asset(logo)} alt="" style={{ height: 120, width: 'auto', marginTop: -6 }} />}
                 </span>
-                {logo && <img src={asset(logo)} alt="" style={{ height: 170, width: 'auto' }} />}
                 {text}
               </div>
               {note && (
@@ -527,7 +530,7 @@ function AppLoop() {
       </div>
       {/* last image back to the queue (shot 1), x50,000 times: down, left, up the left lane, into shot 1 */}
       <svg width={W0} height={210} style={{ display: 'block', overflow: 'visible', marginTop: 20 }}>
-        <path d={`M ${c2} 6 V 64 H ${backX} V ${backY} H -40`} fill="none" stroke={INK} strokeWidth={11} strokeDasharray="26 20" strokeLinecap="round" strokeLinejoin="round" />
+        <path d={`M ${c2} 6 V 64 H ${backX} V ${backY} H -40`} fill="none" stroke={INK} strokeWidth={18} strokeDasharray="38 28" strokeLinecap="round" strokeLinejoin="round" />
         <polygon points={`-2,${backY} -48,${backY - 32} -48,${backY + 32}`} fill={INK} />
         <text x={W0 / 2} y={200} textAnchor="middle" className="font-mono" fill="rgba(20,20,20,0.55)" fontSize={104} letterSpacing={4}>
           × 50,000 images, one loop each
@@ -543,17 +546,19 @@ function PipelineCard() {
     <div className="absolute flex" style={{ left: 70, right: 100, top: 140 }}>
       {/* the whole pipeline is revisited: dashed bracket from the ↻ row back up to step 1 */}
       <div className="relative shrink-0" style={{ width: PIPE.gutter }}>
+        {/* bracket drawn as three plain bars (one dashed shaft + two solid ends): no CSS dashed border, so the shaft cannot render doubled */}
         <div
           className="absolute"
           style={{
             left: 16,
-            right: 40,
-            top: PIPE.chipMid - 5,
-            bottom: PIPE.row - PIPE.chipMid - 6,
-            border: '11px dashed #141414',
-            borderRight: 'none',
+            width: 18,
+            top: PIPE.chipMid - 9,
+            bottom: PIPE.row - PIPE.chipMid - 10,
+            backgroundImage: `repeating-linear-gradient(to bottom, ${INK} 0 38px, transparent 38px 66px)`,
           }}
         />
+        <div className="absolute" style={{ left: 16, width: 64, height: 18, top: PIPE.chipMid - 9, background: INK }} />
+        <div className="absolute" style={{ left: 16, width: PIPE.gutter - 16, height: 18, bottom: PIPE.row - PIPE.chipMid - 10, background: INK }} />
         <div
           className="absolute"
           style={{
@@ -779,10 +784,10 @@ function SplitsTree() {
         className="absolute flex items-center justify-center"
         style={{
           left: COL.b.x + COL.b.w - 70, // overlaps N's right edge: the note is stuck onto the block
-          top: rowY(4) + N_DROP + 11,
+          top: rowY(4) + N_DROP + 11, // top edge as before (clear of the M- row); the note grows downward into the room above the legend
           width: 2700,
-          height: 480,
-          gap: 50,
+          height: 570,
+          gap: 110,
           padding: '0 0 0 70px', // the note's first 70 px lie on top of N: centre in the visible part
           boxSizing: 'border-box',
           background: 'linear-gradient(180deg, #fffefa 0%, #f6f2e8 100%)',
@@ -792,13 +797,13 @@ function SplitsTree() {
       >
         {/* tape */}
         <div className="absolute" style={{ left: -70, top: 40, width: 260, height: 70, background: 'rgba(214,206,186,0.8)', boxShadow: '0 2px 6px rgba(20,20,20,0.18)', transform: 'rotate(-38deg)' }} />
-        <img src={asset('qr-n.png')} alt="QR code: OOD study" className="block shrink-0" style={{ width: 420, height: 420 }} />
+        <img src={asset('qr-n.png')} alt="QR code: OOD study" className="block shrink-0" style={{ width: 500, height: 500 }} />
         <div className="font-body font-semibold text-ink" style={{ fontSize: 120, lineHeight: 1.12 }}>
           Studied separately as OODs
         </div>
       </div>
       {/* legend: what + / - mean */}
-      <div className="absolute flex items-center whitespace-nowrap font-body font-semibold text-ink" style={{ left: 0, top: TREE_H + 80, gap: 110, fontSize: 120 }}>
+      <div className="absolute flex items-center whitespace-nowrap font-body font-semibold text-ink" style={{ left: 0, top: TREE_H + 160, gap: 110, fontSize: 120 }}>
         <span className="flex items-center" style={{ gap: 24 }}>
           <span style={{ width: 100, height: 100, background: TONE.green, border: `10px solid ${INK}` }} />+ ImGT label agrees with ReGT
         </span>
@@ -822,13 +827,13 @@ const DIST = {
 }
 
 function DistBars() {
-  // sized for the top-band card (2200 x 1940): rides up-left inside the card — clear of the right border and the bottom edge (legend lives inside the plot)
+  // sized for the top-band card (2200 x 1816): rides up-left inside the card — clear of the right border and the bottom edge (legend lives inside the plot)
   const W0 = 2020,
-    H0 = 1810
+    H0 = 1686
   const PL = 250,
-    PT = 140,
+    PT = 200,
     PR = 40,
-    PB = 180
+    PB = 300
   const pw = W0 - PL - PR,
     ph = H0 - PT - PB
   const XMAX = 27
@@ -870,33 +875,33 @@ function DistBars() {
           ['1k', 3],
           ['10k', 4],
         ].map(([s, k]) => (
-          <text key={s as string} x={PL - 26} y={PT + ph - ((k as number) / LMAX) * ph} textAnchor="end" dominantBaseline="central" className="font-mono font-semibold" fill={INK} fontSize={60}>
+          <text key={s as string} x={PL - 26} y={PT + ph - ((k as number) / LMAX) * ph} textAnchor="end" dominantBaseline="central" className="font-mono font-semibold" fill={INK} fontSize={80}>
             {s}
           </text>
         ))}
 
         {/* x tick labels */}
         {[0, 4, 8, 12, 16, 20, 24, 26].map((v) => (
-          <text key={v} x={X(v)} y={PT + ph + 88} textAnchor="middle" className="font-mono" fill={INK} fontSize={60}>
+          <text key={v} x={X(v)} y={PT + ph + 105} textAnchor="middle" className="font-mono" fill={INK} fontSize={80}>
             {v}
           </text>
         ))}
 
-        {/* legend, single row top-right */}
-        <g transform={`translate(${PL + pw - 1060},${PT + 25})`}>
+        {/* legend: one row with the #10 chip, left of it */}
+        <g transform={`translate(${PL + pw - 1240},65)`}>
           <rect width={90} height={90} fill="#f4d85a" stroke={INK} strokeWidth={8} />
-          <text x={116} y={46} dominantBaseline="central" className="font-mono font-semibold" fill={INK} fontSize={66} letterSpacing={2}>
+          <text x={125} y={46} dominantBaseline="central" className="font-mono font-semibold" fill={INK} fontSize={80} letterSpacing={2}>
             labels
           </text>
-          <rect x={480} width={90} height={90} fill="url(#db-hatch)" stroke={INK} strokeWidth={8} />
-          <text x={606} y={46} dominantBaseline="central" className="font-mono font-semibold" fill={INK} fontSize={66} letterSpacing={2}>
+          <rect x={520} width={90} height={90} fill="url(#db-hatch)" stroke={INK} strokeWidth={8} />
+          <text x={651} y={46} dominantBaseline="central" className="font-mono font-semibold" fill={INK} fontSize={80} letterSpacing={2}>
             boxes
           </text>
         </g>
 
-        {/* footer: full range now shown, labels up to 14 · boxes up to 26 */}
-        <text x={PL + pw / 2} y={H0 - 5} textAnchor="middle" className="font-mono" fill={INK} fontSize={54}>
-          images per count · log · boxes up to 26
+        {/* footer: caption in the card's 120px body size */}
+        <text x={PL + pw / 2} y={H0 - 45} textAnchor="middle" className="font-mono" fill={INK} fontSize={120}>
+          images per count (log)
         </text>
       </svg>
     </div>
@@ -1749,7 +1754,7 @@ const TASKS = ['classification', 'object crops', 'detection', 'localization', 'c
 function TasksCard() {
   return (
     <div className="absolute flex flex-col" style={{ left: 120, right: 120, top: 70, gap: 24 }}>
-      {/* text stays left of the #12 chip (top right) */}
+      {/* text stays left of the #06 chip (top right) */}
       {/* first sentence on a single row: fitted to the width left of the chip (max = the 120px body size) */}
       <FitLine target={3560} max={120} className="font-body font-semibold text-ink" style={{ lineHeight: 1.25 }}>
         Classification stays the default, as in ImageNet, <span className="font-bold">now split per subset</span>.
@@ -1829,7 +1834,7 @@ function DerivedBars() {
     PR = 2700,
     D1 = 16
   const X = (v: number) => PL + (v / D1) * (PR - PL)
-  const TOP = 140,
+  const TOP = 160,
     ROW = 260
   const H0 = TOP + DERIVED.length * ROW
   return (
@@ -1840,13 +1845,13 @@ function DerivedBars() {
           <rect width="14" height="30" fill="rgba(20,20,20,0.35)" />
         </pattern>
       </defs>
-      <text x={(PL + PR) / 2} y={60} textAnchor="middle" className="font-mono" fill="currentColor" fontSize={66}>
+      <text x={(PL + PR) / 2} y={70} textAnchor="middle" className="font-mono" fill="currentColor" fontSize={90}>
         estimated label error (%)
       </text>
-      <text x={3070} y={60} textAnchor="middle" className="font-mono" fill="currentColor" fontSize={66}>
+      <text x={3070} y={70} textAnchor="middle" className="font-mono" fill="currentColor" fontSize={90}>
         ratio
       </text>
-      <text x={W0} y={60} textAnchor="end" className="font-mono" fill="currentColor" fontSize={66}>
+      <text x={W0} y={70} textAnchor="end" className="font-mono" fill="currentColor" fontSize={90}>
         est. wrong
       </text>
       {DERIVED.map((d, i) => {
@@ -1854,15 +1859,15 @@ function DerivedBars() {
         return (
           <g key={d.name}>
             {i % 2 === 0 && <rect x={-20} y={y} width={W0 + 40} height={ROW} fill="currentColor" fillOpacity={0.05} />}
-            <text x={0} y={y + ROW / 2} dominantBaseline="central" className="font-body font-semibold" fill="currentColor" fontSize={80}>
+            <text x={0} y={y + ROW / 2} dominantBaseline="central" className="font-body font-semibold" fill="currentColor" fontSize={96}>
               {d.name}
             </text>
             <rect x={PL} y={y + 36} width={X(d.a) - PL} height={72} fill="url(#dv-hatch)" stroke="currentColor" strokeWidth={6} />
-            <text x={X(d.a) + 22} y={y + 72} dominantBaseline="central" className="font-mono" fill="currentColor" fontSize={60}>
+            <text x={X(d.a) + 22} y={y + 72} dominantBaseline="central" className="font-mono" fill="currentColor" fontSize={80}>
               {d.a.toFixed(1)}
             </text>
             <rect x={PL} y={y + 124} width={X(d.b) - PL} height={96} fill={RED} stroke="currentColor" strokeWidth={7} />
-            <text x={X(d.b) + 22} y={y + 172} dominantBaseline="central" className="font-mono font-semibold" fill="currentColor" fontSize={72}>
+            <text x={X(d.b) + 22} y={y + 172} dominantBaseline="central" className="font-mono font-semibold" fill="currentColor" fontSize={90}>
               {d.b.toFixed(1)}
             </text>
             <text x={3070} y={y + ROW / 2} textAnchor="middle" dominantBaseline="central" className="font-mono font-bold" fill="currentColor" fontSize={96}>
@@ -1894,7 +1899,7 @@ function DerivedCard() {
               answers two models with uncorrelated error patterns agree on <span className="font-mono font-bold">ReGT</span>
             </div>
           </div>
-          <div className="flex flex-wrap items-center whitespace-nowrap font-mono font-semibold text-ink" style={{ columnGap: 60, rowGap: 16, fontSize: 70, marginTop: 110 }}>
+          <div className="flex flex-wrap items-center whitespace-nowrap font-mono font-semibold text-ink" style={{ columnGap: 60, rowGap: 16, fontSize: 90, marginTop: 110 }}>
             <span className="flex items-center" style={{ gap: 18 }}>
               <span
                 style={{
@@ -2222,11 +2227,11 @@ function ExamplesCard() {
 
 /* ---------- #14 Annotation is iterative ---------- */
 /* one small-object example: photo + zoomed crop, big, with the ImGT and ReGT labels beside it (as on #09) */
-function ZoomRow({ full, crop, imgt, regt }: { full: string; crop: string; imgt: string; regt: string }) {
+function ZoomRow({ full, crop, imgt, regt, imgGap = 24 }: { full: string; crop: string; imgt: string; regt: string; imgGap?: number }) {
   const H = 760
   return (
-    <div className="flex items-center" style={{ gap: 70 }}>
-      <div className="flex shrink-0" style={{ gap: 24 }}>
+    <div className="flex items-center" style={{ gap: 130 }}>
+      <div className="flex shrink-0" style={{ gap: imgGap }}>
         <img src={asset(full)} alt="" className="block" style={{ height: H, width: 'auto' }} />
         <img src={asset(crop)} alt="" className="block" style={{ height: H, width: 'auto' }} />
       </div>
@@ -2254,7 +2259,9 @@ function IterativeCard() {
   return (
     <div className="absolute flex flex-col" style={{ left: 120, right: 120, top: 120, gap: 56 }}>
       {/* one statement instead of heading + paragraph; kept left of the #11 chip (top right) */}
-      <Prose style={{ fontSize: 120, lineHeight: 1.12, marginRight: 380 }}>
+      <Prose style={{ fontSize: 114, lineHeight: 1.12, marginBottom: 40 }}>
+        {/* float: only the first line has to stay clear of the #11 chip, the second may run full width */}
+        <span style={{ float: 'right', width: 380, height: 120 }} />
         Tiny objects, visible only after zooming in, made labels depend on how hard each annotator looked, so we set a rule:{' '}
         <span
           className="font-bold"
@@ -2266,8 +2273,11 @@ function IterativeCard() {
           box what you notice at first glance (~5&nbsp;s).
         </span>
       </Prose>
-      <ZoomRow full="zoom-balloon.jpg" crop="zoom-balloon-crop.jpg" imgt="balloon" regt="balloon, minivan, car wheel" />
-      <ZoomRow full="zoom-fountain.jpg" crop="zoom-fountain-crop.jpg" imgt="fountain" regt="fountain, T-shirt, sock" />
+      {/* rows nudged right so the weight is not all at the left border */}
+      <div className="flex flex-col" style={{ gap: 56, paddingLeft: 130 }}>
+        <ZoomRow full="zoom-balloon.jpg" crop="zoom-balloon-crop.jpg" imgt="balloon" regt="balloon, minivan, car wheel" />
+        <ZoomRow full="zoom-fountain.jpg" crop="zoom-fountain-crop.jpg" imgt="fountain" regt="fountain, T-shirt, sock" imgGap={187} /* widths at 760 px high: 1945 (balloon row) vs 1782, so the right edges and the text line up */ />
+      </div>
     </div>
   )
 }
@@ -2275,14 +2285,14 @@ function IterativeCard() {
 /* ---------- MLLM vs. trained annotators (split off the iterative card) ---------- */
 function MllmCard() {
   return (
-    <div className="absolute flex flex-col" style={{ left: 120, right: 120, top: 120, gap: 56 }}>
-      <div className="font-body font-semibold text-ink" style={{ fontSize: 62, lineHeight: 1.2 }}>
-        Where a frontier MLLM disagreed with our annotations
+    <div className="absolute flex flex-col" style={{ left: 120, right: 120, top: 60, gap: 56 }}>
+      <div className="font-body font-semibold text-ink" style={{ fontSize: 120, lineHeight: 1.12, marginRight: 380 }}>
+        Where a frontier MLLM disagreed with us
       </div>
-      <div className="flex" style={{ border: `10px solid ${INKV}` }}>
+      <div className="flex flex-col" style={{ border: `10px solid ${INKV}`, marginTop: 40 }}>
         {(
           [
-            [RED, '#fff', 'the model was right: annotators conceded or merged its label'],
+            [RED, '#fff', 'the model was right: annotators went with its label or merged it'],
             [GREEN, '#fff', 'the annotators were right'],
           ] as [string, string, string][]
         ).map(([bg, fg, t], i) => (
@@ -2293,20 +2303,20 @@ function MllmCard() {
               background: bg,
               color: fg,
               padding: '30px 44px',
-              gap: 36,
-              borderLeft: i ? `10px solid ${INKV}` : undefined,
+              gap: 60,
+              borderTop: i ? `10px solid ${INKV}` : undefined,
             }}
           >
-            <div className="shrink-0 font-display italic" style={{ fontSize: 150, lineHeight: 0.9 }}>
+            <div className="shrink-0 font-display italic" style={{ fontSize: 190, lineHeight: 0.9 }}>
               ≈50%
             </div>
-            <div className="font-body font-semibold" style={{ fontSize: 58, lineHeight: 1.15 }}>
+            <div className="font-body font-semibold" style={{ fontSize: 100, lineHeight: 1.15 }}>
               {t}
             </div>
           </div>
         ))}
       </div>
-      <Prose style={{ marginTop: 80 }}>
+      <Prose style={{ fontSize: 120, lineHeight: 1.12, marginTop: 20 }}>
         {/* the take-away of this card: bold with a marker-style underline, not a full block */}
         <span
           className="font-bold"
@@ -2317,7 +2327,7 @@ function MllmCard() {
         >
           Neither alone is reliable.
         </span>{' '}
-        So every image got a second, verification pass under the final guidelines, with anonymized MLLM proposals, grounded using SAM3, as an optional reference.
+        So every image got a second, verification pass under the final guidelines, with anonymized MLLM proposals as an optional reference.
       </Prose>
     </div>
   )
@@ -2333,23 +2343,24 @@ const TAKEAWAYS: [string, string][] = [
 
 function TakeawayCard() {
   return (
-    <div className="absolute flex flex-col" style={{ left: 120, right: 120, top: 130, gap: 60 }}>
-      {TAKEAWAYS.map(([h, t], i) => (
-        <div key={h} className="flex items-start" style={{ gap: 40, marginRight: i === 0 ? 380 : 0 }}>
+    <div className="absolute flex flex-col" style={{ left: 120, right: 120, top: 110, gap: 80 }}>
+      {TAKEAWAYS.map(([h], i) => (
+        <div key={h} className="flex items-start" style={{ gap: 46, marginRight: i === 0 ? 380 : 0 }}>
           <div
-            className="shrink-0 bg-white font-mono font-bold text-ink"
+            className="shrink-0 bg-white text-center font-mono font-bold text-ink"
             style={{
               ...ON_WHITE,
+              width: PIPE.indent - 46, // same size as the step chips of card 6
               border: '10px solid #141414',
-              padding: '10px 30px 8px',
+              padding: '10px 0 8px',
               fontSize: 96,
               lineHeight: 1.15,
             }}
           >
             {i + 1}
           </div>
-          <Prose style={{ fontSize: 120 }}>
-            {h} <span style={{ color: 'color-mix(in srgb, var(--color-ink) 60%, transparent)' }}>{t}</span>
+          <Prose style={{ fontSize: 140 }}>
+            {h}
           </Prose>
         </div>
       ))}
@@ -2429,7 +2440,7 @@ const BOX_W = 7300 // wider than the text block on purpose: the text is sized fr
 const BOX_H = 5000
 const BOX = { l: 60, r: 60, t: 190, b: 230 }
 const TITLE_ROT = -1.2
-const LOGO_H = 380 // credential logos, bottom right corner of the poster
+const LOGO_H = 520 // credential logos, bottom right corner of the poster
 const LOGO_GAP = 200 // gap between the logos
 const LOGO_INSET = 200 // distance from the poster's right / bottom edge
 
@@ -2796,31 +2807,78 @@ function edgeNode(id: PanelId): Pt {
   const dy = d.y - c.y
   const t = Math.min(dx ? w / 2 / Math.abs(dx) : Infinity, dy ? h / 2 / Math.abs(dy) : Infinity)
   let u = c.x + dx * t
-  const v = c.y + dy * t
-  // the label tag sits on the top edge: if the node would land under it, slide it along the border to just past the label
+  let v = c.y + dy * t
+  // the label tag sits on the top edge (119px mono + 4px letter spacing, 173px side padding): if the node would land under it,
+  // slide it along the border to just past the label; if the label leaves no room (narrow card), put it on the side edge facing the title instead
   if (Math.abs(v - y) < 1) {
     const m = META[id]
     const chars = `${GROUP[m.group].name} · ${m.title}`.length
-    const labelW = chars * (92 * 0.6 + 3) + 130
-    if (u < x + labelW + 70) u = Math.min(x + labelW + 120, x + w - 420)
+    const labelW = chars * (119 * 0.6 + 4) + 173 + BORDER
+    if (u < x + labelW + 90) {
+      if (x + labelW + 140 <= x + w - 450) u = x + labelW + 140
+      else {
+        u = x + w // right edge: the only narrow card (11) has its neighbour on the left, 110 px away
+        v = y + Math.min(h / 2, 520)
+      }
+    }
   }
   return rotAround({ x: u, y: v }, c, rot)
 }
 
-const LINKS = (Object.keys(R) as PanelId[]).map((id) => ({
-  id,
-  p: edgeNode(id),
-  color: GROUP[META[id].group].color,
-}))
+/* hand-routed hops between consecutive cards (poster px): both ends sit a little inside the card borders, clear of the name tags and
+   number chips; hops 2 -> 3 and 3 -> 4 pass under the title card. Every hop is a smooth curve through its points. */
+const STORY: Pt[][] = [
+  [{ x: 4300, y: 2370 }, { x: 4300, y: 2790 }], // 1 -> 2
+  [{ x: 5870, y: 4200 }, { x: 9938, y: 4300 }, { x: 14060, y: 4100 }], // 2 -> 3 (behind the title)
+  [{ x: 17700, y: 5335 }, { x: 15000, y: 5440 }, { x: 12000, y: 5528 }, { x: 8000, y: 5538 }, { x: 6250, y: 5580 }, { x: 5890, y: 5950 }], // 3 -> 4 (along the gap under the title)
+  [{ x: 4300, y: 9350 }, { x: 4300, y: 9660 }], // 4 -> 5
+  [{ x: 5960, y: 10300 }, { x: 6050, y: 8900 }, { x: 6060, y: 7150 }, { x: 6205, y: 6450 }], // 5 -> 6 (up the gap between the left and middle columns)
+  [{ x: 9000, y: 6950 }, { x: 9000, y: 7290 }], // 6 -> 7
+  [{ x: 10300, y: 7800 }, { x: 10410, y: 7650 }, { x: 10520, y: 7450 }], // 7 -> 8
+  [{ x: 13650, y: 8670 }, { x: 13650, y: 9060 }], // 8 -> 9
+  [{ x: 14700, y: 9500 }, { x: 14780, y: 9400 }, { x: 14880, y: 9300 }], // 9 -> 10 (Labels & boxes)
+  [{ x: 16960, y: 8235 }, { x: 16960, y: 7885 }], // 10 -> 11
+  [{ x: 19590, y: 7880 }, { x: 19775, y: 8250 }, { x: 19655, y: 8750 }], // 11 -> 12 (down the right side)
+  [{ x: 18400, y: 10000 }, { x: 18400, y: 10480 }], // 12 -> 13
+]
+
+function storyPath(pts: Pt[]): string {
+  if (pts.length === 2) return `M ${pts[0].x} ${pts[0].y} L ${pts[1].x} ${pts[1].y}`
+  let d = `M ${pts[0].x} ${pts[0].y}`
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[Math.max(i - 1, 0)]
+    const p1 = pts[i]
+    const p2 = pts[i + 1]
+    const p3 = pts[Math.min(i + 2, pts.length - 1)]
+    d += ` C ${p1.x + (p2.x - p0.x) / 6} ${p1.y + (p2.y - p0.y) / 6} ${p2.x - (p3.x - p1.x) / 6} ${p2.y - (p3.y - p1.y) / 6} ${p2.x} ${p2.y}`
+  }
+  return d
+}
+
+/* the story, card by card: title -> 1 -> 2 -> ... -> 13. Each hop takes its target card's role colour; same look as the old
+   title yarns (ink cord + coloured dashes, square handle at each end). Drawn under the panels, handles on top. */
+const STORY_ORDER: PanelId[] = ['M2', 'M6', 'C', 'A2', 'M1', 'M5', 'M3', 'M8', 'M7', 'B', 'M9', 'M11', 'M10']
+const HOPS: { d: string; color: string; ends: Pt[] }[] = [
+  // title -> card 1 (the story starts at the title)
+  (() => {
+    const e = edgeNode(STORY_ORDER[0])
+    return { d: `M ${TITLE.x} ${TITLE.y} L ${e.x} ${e.y}`, color: GROUP[META[STORY_ORDER[0]].group].color, ends: [e] }
+  })(),
+  ...STORY.map((pts, i) => ({
+    d: storyPath(pts),
+    color: GROUP[META[STORY_ORDER[i + 1]].group].color,
+    ends: [pts[0], pts[pts.length - 1]],
+  })),
+]
 
 /* below the panels */
 function Links() {
   return (
     <svg className="absolute inset-0" width={W} height={H} style={{ pointerEvents: 'none' }}>
-      {LINKS.map((l) => (
-        <g key={l.id} strokeLinecap="round">
-          <line x1={TITLE.x} y1={TITLE.y} x2={l.p.x} y2={l.p.y} stroke={INK} strokeWidth={34} />
-          <line x1={TITLE.x} y1={TITLE.y} x2={l.p.x} y2={l.p.y} stroke={l.color} strokeWidth={20} strokeDasharray="70 40" />
+      {HOPS.map((l, i) => (
+        <g key={i} fill="none" strokeLinecap="round" strokeLinejoin="round">
+          <path d={l.d} stroke={INK} strokeWidth={34} />
+          <path d={l.d} stroke={l.color} strokeWidth={20} strokeDasharray="70 40" />
         </g>
       ))}
     </svg>
@@ -2831,9 +2889,7 @@ function Links() {
 function Nodes() {
   return (
     <svg className="absolute inset-0" width={W} height={H} style={{ pointerEvents: 'none', zIndex: 30 }}>
-      {LINKS.map((l) => (
-        <rect key={l.id} x={l.p.x - 52} y={l.p.y - 52} width={104} height={104} fill="#fff" stroke={l.color} strokeWidth={26} />
-      ))}
+      {HOPS.flatMap((l, i) => l.ends.map((q, j) => <rect key={`${i}-${j}`} x={q.x - 52} y={q.y - 52} width={104} height={104} fill="#fff" stroke={l.color} strokeWidth={26} />))}
     </svg>
   )
 }
