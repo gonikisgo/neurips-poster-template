@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { Fragment, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import PosterV1CorkboardComic from './versions/PosterV1CorkboardComic'
 
 /* =====================================================================
@@ -29,21 +29,22 @@ const TITLE = { x: W / 2, y: 30 + (5000 * TITLE_SCALE) / 2 } // centre: the scal
 /* Panel rectangles [x, y, w, h]. Top band: context story | task + attributes | title | link + numbers. Below: a loose, overlapping pile. */
 const R = {
   // top band: left stack (revised classes, examples), title in the middle, right: splits, distribution, link
-  C: [13950, 2580, 3084, 2300],
+  C: [14000, 2730, 5556, 2650],
   QR: [14000, 320, 5556, 2000],
-  B: [17250, 2580, 2200, 1940],
-  M2: [320, 320, 3700, 2350],
-  M6: [320, 2920, 3700, 2250], // revised classes + prior reannotations, below M2
+  B: [17400, 5900, 2200, 1940], // parked next to card 12 for now (overlaps it)
+  M2: [320, 320, 5560, 2100],
+  M6: [320, 2730, 5600, 2300], // revised classes + prior reannotations, fills the gap between M2 and A2
   // bottom band, under the title, full width, story left to right: 9 attributes -> 10 accuracy -> 12 tasks -> 13 derived -> 15 iterative -> 16 recommendations.
   // (sizes = base size x SCALE; card 6 sits under card 9, which may overlap it for now)
-  A2: [320, 5300, 4000, 4300],
-  M1: [320, 10050, 8200, 2400],
-  M3: [5633, 7240, 4200, 5160],
-  M5: [5633, 5700, 4200, 1300],
-  M8: [9943, 5700, 4200, 3120],
-  M7: [9943, 9100, 4300, 3300],
-  M9: [14400, 5700, 3800, 3960],
-  M10: [14400, 9850, 3300, 1650],
+  A2: [240, 5300, 5700, 4100],
+  M1: [320, 9600, 5700, 2800],
+  M3: [6153, 7240, 4200, 5160],
+  M5: [6153, 5700, 4200, 1300],
+  M8: [10463, 5700, 4200, 3120],
+  M7: [10463, 9100, 4300, 3300],
+  M9: [14800, 7790, 4700, 2350],
+  M10: [14780, 5700, 5000, 1900],
+  M11: [14800, 10550, 4700, 1300], // card 12, MLLM vs. trained annotators (split off card 11)
 } as const satisfies Record<string, readonly [number, number, number, number]>
 type PanelId = keyof typeof R
 
@@ -60,9 +61,7 @@ const ROT: Partial<Record<PanelId, number>> = {
 }
 
 /* content scale per card: the card's R size is its base size x this (cards without an entry are drawn at 1) */
-const SCALE: Partial<Record<PanelId, number>> = {
-  M10: 3300 / 3400,
-}
+const SCALE: Partial<Record<PanelId, number>> = {}
 
 const INK = '#141414'
 const RED = '#e0412f'
@@ -80,7 +79,9 @@ const GROUP: Record<Group, { name: string; color: string }> = {
 type Variant = 'gray' | 'flat' | 'yellow' | 'white' | 'dark'
 
 /* What each block is for. Numbers are reading order; hint = which part of the paper fits here. */
-/* n = reading-order chip (omitted -> no chip); seed = keeps a card's tilt fixed when its number changes */
+/* n = reading-order chip (omitted -> no chip); seed = keeps a card's tilt fixed when its number changes.
+   Reading order: 1 What reannotation fixes, 2 Class problems, 3 Image splits, 4 Labels & boxes, then the bottom story
+   5 Attributes, 6 Annotation pipeline, 7 One benchmark, 8 Accuracy on ReGT, 9 Object crops, 10 Derived benchmarks, 11 Iterative, 12 Recommendations */
 const META: Record<
   PanelId,
   {
@@ -89,19 +90,21 @@ const META: Record<
     title: string
     group: Group
     hint?: string
+    wrap?: boolean // card tag may wrap to two rows (grows upward, stays within the card's width)
     variant?: Variant
     contrib?: string
   }
 > = {
   B: {
-    n: 5,
-    title: 'Labels & boxes per image',
+    n: 4,
+    seed: 5,
+    title: 'Labels & boxes',
     group: 'results',
     hint: 'Fig. 5: distribution of labels & bounding boxes per image, log-scaled',
   },
   C: { n: 3, title: 'Image splits', group: 'method', variant: 'flat' },
   QR: { n: 'LINK', title: 'Dataset, tool & community', group: 'link', variant: 'white' },
-  A2: { n: 9, title: 'Attributes', group: 'method', variant: 'dark' },
+  A2: { n: 5, seed: 9, title: 'Attributes', group: 'method', variant: 'dark' },
   M1: {
     n: 6,
     seed: 7,
@@ -109,24 +112,27 @@ const META: Record<
     group: 'method',
     hint: 'Train annotators → class groups → per-image labels → verification',
   },
-  M2: { n: 4, title: 'What reannotation fixes', group: 'results', variant: 'dark' },
-  M3: { n: 10, title: 'Accuracy on ReGT', group: 'results', variant: 'white' },
-  M5: { n: 12, title: 'One benchmark, many tasks', group: 'results' },
-  M8: { n: 13, title: 'Recognition on object crops', group: 'results' },
-  M6: { n: 7, title: 'Revised classes & prior efforts', group: 'method' },
+  M2: { n: 1, seed: 4, title: 'What reannotation fixes', group: 'results', variant: 'dark' },
+  M3: { n: 8, seed: 10, title: 'Accuracy on ReGT', group: 'results', variant: 'white' },
+  M5: { n: 7, seed: 12, title: 'One benchmark, many tasks', group: 'results' },
+  M8: { n: 9, seed: 13, title: 'Recognition on object crops', group: 'results' },
+  M6: { n: 2, seed: 7, title: 'Class problems & multi-label images', group: 'method' },
   M7: {
-    n: 14,
+    n: 10,
+    seed: 14,
     title: 'Errors in derived benchmarks',
     group: 'results',
     variant: 'white',
   },
   M9: {
-    n: 15,
+    n: 11,
+    seed: 15,
     title: 'Annotation is iterative',
     group: 'method',
     variant: 'dark',
   },
-  M10: { n: 16, title: 'Recommendations', group: 'takeaway', variant: 'white' },
+  M11: { n: 12, seed: 17, title: 'MLLM vs. trained annotators', group: 'method', variant: 'dark' },
+  M10: { n: 13, seed: 16, title: 'Recommendations', group: 'takeaway', variant: 'white' },
 }
 
 const tiltFor = (n: number) => ({
@@ -157,13 +163,14 @@ function Index({ n }: { n: number | string }) {
 }
 
 /* Role + section name, on the top-left edge like a bbox label */
-function Label({ group, children }: { group: Group; children: ReactNode }) {
+function Label({ group, children, wrapW }: { group: Group; children: ReactNode; wrapW?: number }) {
   return (
     <div
-      className="absolute z-10 whitespace-nowrap font-mono font-semibold text-white"
+      className={`absolute z-10 font-mono font-semibold text-white ${wrapW ? '' : 'whitespace-nowrap'}`}
       style={{
         left: -BORDER,
-        top: -190 - BORDER,
+        // wrapping tag: anchored by its bottom edge (same place as the one-row tag's), so a second row grows upward
+        ...(wrapW ? { bottom: `calc(100% + ${BORDER}px)`, width: wrapW + 2 * BORDER } : { top: -190 - BORDER }),
         background: GROUP[group].color,
         padding: '32px 97px 26px 76px',
         fontSize: 119, // = the title card's box tag (110px) as drawn at TITLE_SCALE
@@ -355,7 +362,7 @@ function AttrChip2({ color, children }: { color: string; children: ReactNode }) 
       style={{
         background: color,
         padding: '16px 46px 12px 34px',
-        fontSize: 76,
+        fontSize: 92,
         lineHeight: 1.1,
         letterSpacing: 3,
       }}
@@ -384,7 +391,7 @@ function AttrNote({ name, color, text }: { name: string; color: string; text: st
   return (
     <div className="flex flex-col items-start" style={{ gap: 12 }}>
       <AttrChip2 color={color}>{name}</AttrChip2>
-      <div className="font-body font-semibold text-ink" style={{ fontSize: 74, lineHeight: 1.12 }}>
+      <div className="font-body font-semibold text-ink" style={{ fontSize: 120, lineHeight: 1.12 }}>
         {text}
       </div>
     </div>
@@ -398,7 +405,12 @@ function AttrCell({ name, color, src, text, pos = 'center', stat }: { name: stri
         <img src={asset(src)} alt="" className="block h-full w-full" style={{ objectFit: 'cover', objectPosition: pos }} />
       </div>
       <AttrNote name={name} color={color} text={text} />
-      {stat !== undefined && <AttrStats g={stat} />}
+      {/* pushed to the cell's bottom, so the tiles of all four cells sit on one row whatever the description's length */}
+      {stat !== undefined && (
+        <div style={{ marginTop: 'auto', paddingTop: 110 }}>
+          <AttrStats g={stat} />
+        </div>
+      )}
     </div>
   )
 }
@@ -407,25 +419,17 @@ function AttrCell({ name, color, src, text, pos = 'center', stat }: { name: stri
    Whole-pipeline steps, then the per-image loop inside the tool as one row of
    app screenshots (from figures/app_screenshots, reordered to story order). */
 const APP_STEPS: [string, string, ReactNode][] = [
-  ['1', 'Recruit & train annotators', '7 in-house non-experts and one lead annotator, trained on ImageNet’s known class problems'],
-  ['2', 'Work classes in groups', 'grouped by WordNet parent: confusable and co-occurring classes are more likely labeled together'],
-  ['3', 'Prep every class first', 'study its images; write a definition and, if needed, a better name in a shared table'],
-  [
-    '4',
-    'Label image by image',
-    <>
-      box every object noticed within ~5 s and add attributes
-      <br />
-      OWLv2 top-5 boxes + OpenCLIP top-20 labels as optional hints
-    </>,
-  ],
+  ['1', 'Recruit & train in-house non-expert annotators', ''],
+  ['2', 'Review correlated classes in groups', ''],
+  ['3', 'Class preparation step', ''],
+  ['4', 'Label image by image, with OWLv2 hints', ''],
 ]
 const APP_LOOP: [string, string] = ['Revise mid-run, verify at the end', 'edge cases kept updating names, definitions and attributes; a final pass re-checked every image']
 const APP_SHOTS: [string, string][] = [
   ['app-loop-1.png', 'pick from the queue'],
-  ['app-loop-2.png', 'proposed boxes + top-20 likely labels'],
+  ['app-loop-2.png', 'label all visible ImageNet-1k objects'],
 ]
-const PIPE = { gutter: 120, indent: 170, row: 178, chipMid: 53, loopW: 4400 } // step row: 74px title + 66px line; chip centre 53px from its top
+const PIPE = { gutter: 120, indent: 220, row: 242, chipMid: 64, loopW: 4960 } // step row: 104px title + 104px line; chip centre 53px from its top
 
 function PipeStep({ n, t, s, children }: { n: string; t: string; s: ReactNode; children?: ReactNode }) {
   return (
@@ -440,7 +444,7 @@ function PipeStep({ n, t, s, children }: { n: string; t: string; s: ReactNode; c
             border: '10px solid #141414',
           }}
         >
-          <svg width={74} height={74} viewBox="0 0 64 64">
+          <svg width={92} height={92} viewBox="0 0 64 64">
             <path d="M 52 32 A 20 20 0 1 1 42 14.7" fill="none" stroke={INK} strokeWidth={8} strokeLinecap="round" />
             <polygon points="51,20 33,22 44,5" fill={INK} />
           </svg>
@@ -452,7 +456,7 @@ function PipeStep({ n, t, s, children }: { n: string; t: string; s: ReactNode; c
             width: PIPE.indent - 46,
             border: '10px solid #141414',
             padding: '10px 0 8px',
-            fontSize: 60,
+            fontSize: 96,
             lineHeight: 1.15,
           }}
         >
@@ -460,12 +464,14 @@ function PipeStep({ n, t, s, children }: { n: string; t: string; s: ReactNode; c
         </div>
       )}
       <div className="min-w-0 flex-1">
-        <div className="font-body font-semibold text-ink" style={{ fontSize: 74, lineHeight: 1.2 }}>
+        <div className="whitespace-nowrap font-body font-semibold text-ink" style={{ fontSize: 104, lineHeight: 1.12 }}>
           {t}
         </div>
-        <div className="font-body font-semibold" style={{ fontSize: 66, lineHeight: 1.2, color: 'rgba(20,20,20,0.6)', marginTop: 10 }}>
-          {s}
-        </div>
+        {s && (
+          <div className="font-body font-semibold" style={{ fontSize: 104, lineHeight: 1.12, color: 'rgba(20,20,20,0.6)', marginTop: 10 }}>
+            {s}
+          </div>
+        )}
         {children}
       </div>
     </div>
@@ -475,19 +481,24 @@ function PipeStep({ n, t, s, children }: { n: string; t: string; s: ReactNode; c
 /* step 4 owns the per-image loop inside the tool: 2 x 2 screenshots, then back to the queue */
 function AppLoop() {
   const W0 = PIPE.loopW // narrower than the text column: keeps the screenshots clear of the card's right edge
-  const GAP = 40
+  const GAP = 200 // room between the two shots for the arrow
   const cw = (W0 - GAP) / 2
   const c2 = cw + GAP + cw / 2
   // grid geometry (px): shot height from its aspect ratio, caption = 22 margin + one CAP px line
-  const CAP = 54
+  const CAP = 104
   const shotH = (cw * 1112) / 1920
   const gridH = shotH + 22 + CAP * 1.25
   const svgTop = gridH + 20 // the svg below the grid starts here
   const backY = shotH / 2 - svgTop // shot 1 mid-height, in svg coordinates
   const backX = -90 // return lane, left of the screenshots (under the step-4 chip)
   return (
-    <div style={{ width: W0, marginTop: 64 }}>
-      <div className="grid items-start" style={{ gridTemplateColumns: '1fr 1fr', columnGap: GAP, rowGap: 80 }}>
+    <div style={{ width: W0 }}>
+      <div className="relative grid items-start" style={{ gridTemplateColumns: '1fr 1fr', columnGap: GAP, rowGap: 80 }}>
+        {/* shot 1 -> shot 2 */}
+        <svg className="absolute" width={GAP} height={90} viewBox={`0 0 ${GAP} 90`} style={{ left: cw, top: shotH / 2 - 45 }}>
+          <line x1={34} y1={45} x2={GAP - 62} y2={45} stroke={INK} strokeWidth={18} strokeLinecap="round" />
+          <polygon points={`${GAP - 78},8 ${GAP - 22},45 ${GAP - 78},82`} fill={INK} />
+        </svg>
         {APP_SHOTS.map(([src, cap]) => (
           <div key={src} className="relative min-w-0">
             <img
@@ -515,10 +526,10 @@ function AppLoop() {
         ))}
       </div>
       {/* last image back to the queue (shot 1), x50,000 times: down, left, up the left lane, into shot 1 */}
-      <svg width={W0} height={140} style={{ display: 'block', overflow: 'visible', marginTop: 20 }}>
+      <svg width={W0} height={210} style={{ display: 'block', overflow: 'visible', marginTop: 20 }}>
         <path d={`M ${c2} 6 V 64 H ${backX} V ${backY} H -40`} fill="none" stroke={INK} strokeWidth={11} strokeDasharray="26 20" strokeLinecap="round" strokeLinejoin="round" />
         <polygon points={`-2,${backY} -48,${backY - 32} -48,${backY + 32}`} fill={INK} />
-        <text x={W0 / 2} y={132} textAnchor="middle" className="font-mono" fill="rgba(20,20,20,0.55)" fontSize={56} letterSpacing={4}>
+        <text x={W0 / 2} y={200} textAnchor="middle" className="font-mono" fill="rgba(20,20,20,0.55)" fontSize={104} letterSpacing={4}>
           × 50,000 images, one loop each
         </text>
       </svg>
@@ -557,34 +568,33 @@ function PipelineCard() {
         />
       </div>
       <div className="flex min-w-0 flex-1 flex-col" style={{ gap: 90 }}>
-        <div className="flex items-start" style={{ gap: 120 }}>
-          {/* steps 1-3 on the left, step 4 with the tool screenshots on the right */}
-          <div className="flex shrink-0 flex-col" style={{ gap: 44, width: 3100 }}>
-            {APP_STEPS.slice(0, 3).map(([n, t, s]) => (
-              <PipeStep key={n} n={n} t={t} s={s} />
-            ))}
-          </div>
-          <div className="min-w-0 flex-1">
-            {APP_STEPS.slice(3).map(([n, t, s]) => (
-              <PipeStep key={n} n={n} t={t} s={s}>
-                <AppLoop />
-              </PipeStep>
-            ))}
+        {/* steps 1 2 / 3 4 in a 2 x 2 grid, the tool screenshots (step 4's loop) under them */}
+        <div className="grid items-start" style={{ gridTemplateColumns: '2750px 1fr', columnGap: 60, rowGap: 60 }}>
+          {APP_STEPS.map(([n, t, s]) => (
+            <PipeStep key={n} n={n} t={t} s={s} />
+          ))}
+        </div>
+        {/* fixed box = the old (4400 px wide) loop's height, so the rows above and below stay put; the bigger loop grows equally up and down out of it, centred on the card */}
+        <div style={{ height: 1645, paddingLeft: 225, marginTop: 70 }}>
+          <div style={{ position: 'relative', top: -58 }}>
+            <AppLoop />
           </div>
         </div>
-        <PipeStep n="↻" t={APP_LOOP[0]} s={APP_LOOP[1]} />
+        <div style={{ marginTop: 10 }}>
+          <PipeStep n="↻" t={APP_LOOP[0]} s={APP_LOOP[1]} />
+        </div>
       </div>
     </div>
   )
 }
 
 /* ---------- Image splits (the paper's Fig. 4 as a left-to-right tree) ---------- */
-const TREE = { w: 2848, row: 262, gap: 36 }
+const TREE = { w: 5180, row: 300, gap: 36 }
 const N_DROP = 60 // N sits lower than the M row grid: extra air below M
 const N_EXTRA = 180 // N is taller than a row: room for the QR code beside it
 const TREE_H = 5 * TREE.row + 4 * TREE.gap + N_DROP + N_EXTRA
 const rowY = (r: number) => r * (TREE.row + TREE.gap)
-const COL = { a: { x: 0, w: 460 }, b: { x: 550, w: 830 }, c: { x: 1470, w: 1378 } }
+const COL = { a: { x: 0, w: 760 }, b: { x: 840, w: 1250 }, c: { x: 2180, w: 3000 } }
 // semi-transparent tints (as in the paper): poster green = Method role colour, poster red = RED
 const TONE = {
   grey: 'rgba(255,255,255,0.6)',
@@ -698,18 +708,18 @@ const TREE_EDGES: [string, string][] = [
 /* what the two label sets are: close to the top, so the story can point back to it */
 function GtDefs() {
   return (
-    <div className="absolute flex flex-col" style={{ left: 100, top: 40, gap: 12 }}>
+    <div className="absolute flex flex-col" style={{ left: 100, top: 40, gap: 6 }}>
       {(
         [
-          ['ReGT', '- our new ReImageNet multilabel boxes and attributes'],
-          ['ImGT', '- the original ImageNet-1k single-label ground truth'],
+          ['ReGT', 'Our ReImageNet annotations'],
+          ['ImGT', 'original single-label ground truth'],
         ] as ['ReGT' | 'ImGT', string][]
       ).map(([k, t]) => (
-        <div key={k} className="flex items-center" style={{ gap: 20 }}>
-          <span className="font-mono font-bold text-ink" style={{ fontSize: 62, letterSpacing: 2 }}>
-            {k}
+        <div key={k} className="flex items-center" style={{ gap: 26 }}>
+          <span className="font-mono font-bold text-ink" style={{ fontSize: 120, letterSpacing: 2, lineHeight: 1.1 }}>
+            {k}:
           </span>
-          <div className="whitespace-nowrap font-body font-semibold text-ink" style={{ fontSize: 62, lineHeight: 1.15 }}>
+          <div className="whitespace-nowrap font-body font-semibold text-ink" style={{ fontSize: 120, lineHeight: 1.08 }}>
             {t}
           </div>
         </div>
@@ -730,7 +740,7 @@ function SplitsTree() {
     return `M ${x1} ${y1} H ${mid} V ${y2} H ${x2}`
   }
   return (
-    <div className="absolute" style={{ left: 100, top: 320, width: TREE.w, height: TREE_H }}>
+    <div className="absolute" style={{ left: 100, top: 400, width: TREE.w, height: TREE_H }}>
       <svg className="absolute inset-0" width={TREE.w} height={TREE_H} style={{ overflow: 'visible' }}>
         {TREE_EDGES.map((e) => (
           <path key={e.join()} d={edge(e)} fill="none" stroke={INK} strokeWidth={10} />
@@ -759,41 +769,41 @@ function SplitsTree() {
               {n.pct}
             </span>
           </div>
-          <div className="font-body font-semibold text-ink" style={{ fontSize: 54, lineHeight: 1.1, marginTop: 14 }}>
+          <div className="font-body font-semibold text-ink" style={{ fontSize: 120, lineHeight: 1.1, marginTop: 14 }}>
             {n.desc}
           </div>
         </div>
       ))}
       {/* N: a separate effort on these images (OOD), QR to the colleagues' work, on a sticky note */}
       <div
-        className="absolute flex items-center"
+        className="absolute flex items-center justify-center"
         style={{
           left: COL.b.x + COL.b.w - 70, // overlaps N's right edge: the note is stuck onto the block
-          top: rowY(4) + N_DROP - 19,
-          width: 1420,
+          top: rowY(4) + N_DROP + 11,
+          width: 2700,
           height: 480,
           gap: 50,
-          padding: '0 40px 0 120px',
+          padding: '0 0 0 70px', // the note's first 70 px lie on top of N: centre in the visible part
           boxSizing: 'border-box',
           background: 'linear-gradient(180deg, #fffefa 0%, #f6f2e8 100%)',
           boxShadow: '14px 22px 34px rgba(20,20,20,0.32), 0 0 0 2px rgba(20,20,20,0.08)',
-          transform: 'rotate(-1.8deg)',
+          transform: 'rotate(1.8deg)',
         }}
       >
         {/* tape */}
         <div className="absolute" style={{ left: -70, top: 40, width: 260, height: 70, background: 'rgba(214,206,186,0.8)', boxShadow: '0 2px 6px rgba(20,20,20,0.18)', transform: 'rotate(-38deg)' }} />
         <img src={asset('qr-n.png')} alt="QR code: OOD study" className="block shrink-0" style={{ width: 420, height: 420 }} />
-        <div className="flex-1 whitespace-nowrap font-body font-semibold text-ink" style={{ fontSize: 56, lineHeight: 1.12 }}>
+        <div className="font-body font-semibold text-ink" style={{ fontSize: 120, lineHeight: 1.12 }}>
           Studied separately as OODs
         </div>
       </div>
       {/* legend: what + / - mean */}
-      <div className="absolute flex items-center whitespace-nowrap font-body font-semibold text-ink" style={{ left: 0, top: TREE_H + 50, gap: 110, fontSize: 60 }}>
+      <div className="absolute flex items-center whitespace-nowrap font-body font-semibold text-ink" style={{ left: 0, top: TREE_H + 80, gap: 110, fontSize: 120 }}>
         <span className="flex items-center" style={{ gap: 24 }}>
-          <span style={{ width: 64, height: 64, background: TONE.green, border: `8px solid ${INK}` }} />+ ImGT label agrees with ReGT
+          <span style={{ width: 100, height: 100, background: TONE.green, border: `10px solid ${INK}` }} />+ ImGT label agrees with ReGT
         </span>
         <span className="flex items-center" style={{ gap: 24 }}>
-          <span style={{ width: 64, height: 64, background: TONE.red, border: `8px solid ${INK}` }} />− disagrees
+          <span style={{ width: 100, height: 100, background: TONE.red, border: `10px solid ${INK}` }} />− disagrees
         </span>
       </div>
     </div>
@@ -1097,8 +1107,8 @@ function SubsetChip({ code, size = 58 }: { code: string; size?: number }) {
 
 /* ---------- #07 Classes & scoring ---------- */
 /* the two label sets, as chips: ReGT (ours) in the poster's teal green, ImGT (original ImageNet-1k label) in paper white */
-function GtChip({ k, size = 50 }: { k: 'ImGT' | 'ReGT'; size?: number }) {
-  const ours = k === 'ReGT'
+function GtChip({ k, size = 50, plain = false }: { k: 'ImGT' | 'ReGT'; size?: number; plain?: boolean }) {
+  const ours = k === 'ReGT' && !plain
   return (
     <span
       className="inline-block shrink-0 whitespace-nowrap font-mono font-bold align-middle"
@@ -1140,15 +1150,7 @@ function CardRef({ n }: { n: number }) {
 /* ImageNet class name, like the paper's \\cls{}: monospace on a light highlight, so it stands out from prose */
 function Cls({ children }: { children: ReactNode }) {
   return (
-    <span
-      className="font-mono font-semibold whitespace-nowrap"
-      style={{
-        fontSize: '0.9em',
-        background: 'rgba(42,168,118,0.2)',
-        padding: '0 0.18em',
-        borderRadius: 6,
-      }}
-    >
+    <span className="font-mono font-semibold whitespace-nowrap" style={{ fontSize: '0.9em' }}>
       {children}
     </span>
   )
@@ -1327,36 +1329,29 @@ const SCORE_TERMS: [ReactNode, ReactNode][] = [
 
 const KICK_SENTENCE: CSSProperties = { textTransform: 'none', letterSpacing: 3, fontSize: 60 }
 
+/* the problems we met while annotating, one line each: rule + example */
+const CLASS_PROBLEMS: [string, ReactNode][] = [
+  ['subclass', <>label the most specific: <Cls>bathtub</Cls>, not <Cls>tub</Cls></>],
+  ['part-of', <>label both: <Cls>space bar</Cls> and <Cls>computer keyboard</Cls></>],
+  ['synonyms', <>keep both names: <Cls>laptop</Cls> = <Cls>notebook</Cls></>],
+  ['multi-label box', <>added midway: a <Cls>cardigan</Cls> made of <Cls>wool</Cls></>],
+  ['misnamed', <>class = its content: <Cls>tiger cat</Cls> holds tabby cats, oncillas, tigers</>],
+]
+
 function ClassesCard() {
   return (
     <div className="absolute flex flex-col" style={{ left: 130, right: 130, top: 60, gap: 26 }}>
-      <Kicker style={KICK_SENTENCE}>Labeling rules</Kicker>
-      {/* alternating stripes (as in the charts) keep the close rows apart */}
+      {/* alternating stripes keep the close rows apart */}
       <div className="flex flex-col" style={{ marginLeft: -24, marginRight: -24 }}>
-        {CLASS_RULES.map(([k, t], i) => (
-          <div
-            key={k}
-            className="flex items-start"
-            style={{
-              gap: 44,
-              padding: '14px 24px',
-              background: i % 2 === 0 ? 'rgba(255,255,255,0.55)' : 'transparent',
-            }}
-          >
+        {CLASS_PROBLEMS.map(([k, t], i) => (
+          <div key={k} className="flex items-center" style={{ gap: 44, padding: '34px 24px', background: i % 2 === 0 ? 'rgba(255,255,255,0.55)' : 'transparent' }}>
             <div
               className="shrink-0 bg-white text-center font-mono font-bold text-ink"
-              style={{
-                ...ON_WHITE,
-                width: 600,
-                border: '10px solid #141414',
-                padding: '10px 0 8px',
-                fontSize: 56,
-                lineHeight: 1.15,
-              }}
+              style={{ ...ON_WHITE, width: 960, border: '10px solid #141414', padding: '14px 0 12px', fontSize: 96, lineHeight: 1.15 }}
             >
               {k}
             </div>
-            <Prose style={{ marginTop: 2 }}>{t}</Prose>
+            <Prose style={{ fontSize: 120, lineHeight: 1.12 }}>{t}</Prose>
           </div>
         ))}
       </div>
@@ -1610,15 +1605,15 @@ const statFill = (v: number) => `color-mix(in srgb, ${v >= 0 ? GREEN : RED} ${Ma
 
 function AttrStats({ g }: { g: number }) {
   return (
-    <div className="flex items-stretch" style={{ gap: 20, marginTop: 14 }}>
+    <div className="flex items-stretch" style={{ gap: 20 }}>
       {FAMS.map((f) => {
         const mean = avg(famRows(f).map((m) => m.attr[g]))
         return (
           <div key={f} className="flex flex-1 flex-col items-center" style={{ background: statFill(mean), border: `6px solid ${INK}`, padding: '14px 0 10px', gap: 0 }}>
-            <span className="font-mono font-semibold" style={{ color: INK, fontSize: 50, lineHeight: 1.1 }}>
+            <span className="font-mono font-semibold" style={{ color: INK, fontSize: 64, lineHeight: 1.1 }}>
               {FAM[f].name}
             </span>
-            <span className="font-mono font-bold" style={{ color: INK, fontSize: 104, lineHeight: 1.1 }}>
+            <span className="font-mono font-bold" style={{ color: INK, fontSize: 120, lineHeight: 1.1 }}>
               {signed(mean)}
             </span>
           </div>
@@ -1760,7 +1755,7 @@ function TasksCard() {
         Classification stays the default, as in ImageNet, <span className="font-bold">now split per subset</span>.
       </FitLine>
       <Prose style={{ fontSize: 120, marginTop: 12, marginBottom: 20 }}>The boxes make many other tasks possible:</Prose>
-      {/* comic-style task stickers: 2 x 3, hard shadow, slight tilts; the default task is highlighted */}
+      {/* comic-style task stickers: 2 x 3, hard shadow, slight tilts; */}
       <div className="grid" style={{ gridTemplateColumns: 'repeat(2, 1fr)', gap: 30, marginTop: 0, paddingRight: 14 }}>
         {TASKS.map((t, i) => (
           <div
@@ -1768,7 +1763,7 @@ function TasksCard() {
             className="flex items-center font-mono font-bold text-ink"
             style={{
               ...ON_WHITE,
-              background: i === 0 ? '#f4d85a' : '#fff',
+              background: '#fff',
               border: '12px solid #141414',
               boxShadow: '14px 14px 0 #141414',
               transform: `rotate(${[-1.2, 1, 0.8, -1, -0.8, 1.2][i]}deg)`,
@@ -1926,7 +1921,7 @@ function DerivedCard() {
 
 /* ---------- #13 vs. prior reannotations ---------- */
 const PRIOR_ML = [
-  { name: 'ReGT (ours)', v: 31.9, n: '50,000', ours: true },
+  { name: 'ReImageNet', v: 31.9, n: '50,000', ours: true },
   { name: 'ImageNetMultiLabel', v: 21.6, n: '10,000' },
   { name: 'Multi-label ann.', v: 18.3, n: '20,000' },
   { name: 'ReaL', v: 14.9, n: '50,000' },
@@ -1934,12 +1929,12 @@ const PRIOR_ML = [
 ]
 /* S− accuracy of GPT-5.4, Qwen3-VL, Gemma 4, EVA-02: against the prior set's labels (a) vs ReGT (b) */
 function PriorMlBars() {
-  const W0 = 2760
-  const PL = 1000,
-    PR = 2060,
+  const W0 = 5360
+  const PL = 1450,
+    PR = 4250,
     D1 = 35
   const X = (v: number) => PL + (v / D1) * (PR - PL)
-  const ROW = 150
+  const ROW = 135
   const H0 = PRIOR_ML.length * ROW
   return (
     <svg className="text-ink" width={W0} height={H0} style={{ display: 'block', overflow: 'visible' }}>
@@ -1953,14 +1948,14 @@ function PriorMlBars() {
         const cy = i * ROW + ROW / 2
         return (
           <g key={d.name}>
-            <text x={0} y={cy} dominantBaseline="central" className={d.ours ? 'font-body font-bold' : 'font-body font-semibold'} fill="currentColor" fontSize={62}>
+            <text x={0} y={cy} dominantBaseline="central" className={d.ours ? 'font-body font-bold' : 'font-body font-semibold'} fill="currentColor" fontSize={104}>
               {d.name}
             </text>
-            <rect x={PL} y={cy - 46} width={X(d.v) - PL} height={92} fill={d.ours ? GREEN : 'url(#pr-hatch)'} stroke="currentColor" strokeWidth={7} />
-            <text x={X(d.v) + 26} y={cy} dominantBaseline="central" className="font-mono font-semibold" fill="currentColor" fontSize={62}>
+            <rect x={PL} y={cy - 55} width={X(d.v) - PL} height={110} fill={d.ours ? '#f4d85a' : 'url(#pr-hatch)'} stroke="currentColor" strokeWidth={7} />
+            <text x={X(d.v) + 26} y={cy} dominantBaseline="central" className="font-mono font-semibold" fill="currentColor" fontSize={104}>
               {d.v.toFixed(1)}%
             </text>
-            <text x={W0} y={cy} textAnchor="end" dominantBaseline="central" className="font-mono font-semibold" fill="currentColor" fillOpacity={0.8} fontSize={60}>
+            <text x={W0} y={cy} textAnchor="end" dominantBaseline="central" className="font-mono font-semibold" fill="currentColor" fillOpacity={0.8} fontSize={104}>
               of {d.n}
             </text>
           </g>
@@ -2064,17 +2059,61 @@ function AlluvialReal({ k = 1 }: { k?: number }) {
   )
 }
 
+/* one row: where the prior efforts' multi-label ratios sit (11-22 %) vs ours (31.9 %) */
+function MultilabelStrip() {
+  const W0 = 5340,
+    X0 = 300,
+    X1 = 4700,
+    D1 = 35
+  const X = (v: number) => X0 + (v / D1) * (X1 - X0)
+  const prior = PRIOR_ML.filter((d) => !d.ours)
+  const lo = Math.min(...prior.map((d) => d.v))
+  const hi = Math.max(...prior.map((d) => d.v))
+  const ours = PRIOR_ML.find((d) => d.ours)!
+  const AY = 200
+  return (
+    <svg className="text-ink" width={W0} height={400} style={{ display: 'block', overflow: 'visible' }}>
+      <defs>
+        <pattern id="ml-hatch" width="30" height="30" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+          <rect width="30" height="30" fill="#fff" />
+          <rect width="14" height="30" fill="rgba(20,20,20,0.35)" />
+        </pattern>
+      </defs>
+      <line x1={X0} y1={AY} x2={X1} y2={AY} stroke="currentColor" strokeWidth={8} />
+      {[0, 10, 20, 30].map((v) => (
+        <g key={v}>
+          <line x1={X(v)} y1={AY - 16} x2={X(v)} y2={AY + 16} stroke="currentColor" strokeWidth={8} />
+          <text x={X(v)} y={AY + 100} textAnchor="middle" className="font-mono font-semibold" fill="currentColor" fillOpacity={0.7} fontSize={80}>
+            {v}%
+          </text>
+        </g>
+      ))}
+      <rect x={X(lo)} y={AY - 40} width={X(hi) - X(lo)} height={80} fill="url(#ml-hatch)" stroke="currentColor" strokeWidth={7} />
+      {prior.map((d) => (
+        <circle key={d.name} cx={X(d.v)} cy={AY} r={26} fill="#fff" stroke="currentColor" strokeWidth={8} />
+      ))}
+      <circle cx={X(ours.v)} cy={AY} r={46} fill={GREEN} stroke="currentColor" strokeWidth={8} />
+      <text x={(X(lo) + X(hi)) / 2} y={90} textAnchor="middle" className="font-body font-semibold" fill="currentColor" fontSize={104}>
+        prior efforts: {Math.round(lo)}–{Math.round(hi)}%
+      </text>
+      <text x={X(ours.v)} y={90} textAnchor="middle" className="font-body font-bold" fill="currentColor" fontSize={104}>
+        ours: {ours.v}%
+      </text>
+    </svg>
+  )
+}
+
 function PriorCard() {
   return (
     <div className="absolute flex flex-col" style={{ left: 120, right: 120, top: 90, gap: 28 }}>
-      <Kicker style={{ ...KICK_SENTENCE, color: INKV, marginBottom: 120 }}>Multilabel images ratio in prior reannotation efforts</Kicker>
+      <Kicker style={{ ...KICK_SENTENCE, fontSize: 120, color: INKV, marginBottom: 55 }}>Multi-label images: ours vs. prior efforts</Kicker>
       <PriorMlBars />
     </div>
   )
 }
 
 /* ---------- #08 What reannotation fixes (paper Fig. 1, ReGT halves) ---------- */
-const EXAMPLES: { src: string; tag: string; ok: boolean; imgt: string; regt: string }[] = [
+const EXAMPLES: { src: string; orig?: string; ar?: number; tag: string; ok: boolean; imgt: string; regt: string }[] = [
   {
     src: 'ex-desk.jpg',
     tag: 'incomplete',
@@ -2084,12 +2123,14 @@ const EXAMPLES: { src: string; tag: string; ok: boolean; imgt: string; regt: str
   },
   {
     src: 'ex-barbershop.jpg',
+    orig: 'ex-barbershop-orig.jpg',
+    ar: 1500 / 1125,
     tag: 'incomplete',
     ok: true,
     imgt: 'barbershop',
-    regt: '+ 5 more, the TV is a mirror reflection',
+    regt: '+ 5 more,\nthe TV is a mirror reflection',
   },
-  { src: 'ex-pier.jpg', tag: 'wrong', ok: false, imgt: 'pier', regt: 'suspension bridge, cliff' },
+  { src: 'ex-pier.jpg', orig: 'ex-pier-orig.jpg', ar: 1125 / 1500, tag: 'wrong', ok: false, imgt: 'pier', regt: 'suspension bridge, cliff' },
   {
     src: 'ex-viper.jpg',
     tag: 'fine-grained',
@@ -2124,12 +2165,57 @@ function ExampleCell({ e, h }: { e: (typeof EXAMPLES)[number]; h: number }) {
   )
 }
 
-/* teaser: two big examples (barbershop = incomplete, pier = wrong), stacked, text beside each photo */
-function ExamplesCard() {
+/* teaser (as in the paper's Fig. 1): original image -> arrow -> the same image with our labels and boxes */
+function TeaserArrow() {
   return (
-    <div className="absolute flex items-center justify-between" style={{ left: 110, right: 110, top: 290, bottom: 100 }}>
-      <ExampleCell e={EXAMPLES[1]} h={1400} />
-      <ExampleCell e={EXAMPLES[2]} h={1400} />
+    <svg width={220} height={120} viewBox="0 0 220 120" className="shrink-0" style={{ color: INKV, marginTop: 490 }}>
+      <line x1={10} y1={60} x2={160} y2={60} stroke="currentColor" strokeWidth={22} strokeLinecap="round" />
+      <polygon points="140,10 215,60 140,110" fill="currentColor" />
+    </svg>
+  )
+}
+
+/* one image of the teaser with its label line underneath: side='im' = original + ImGT, side='re' = annotated + ReGT */
+function TeaserCol({ e, h, side }: { e: (typeof EXAMPLES)[number]; h: number; side: 'im' | 're' }) {
+  const w = h * (e.ar ?? 1)
+  return (
+    <div className="flex min-w-0 flex-col" style={{ width: w, gap: 28 }}>
+      <img src={asset(side === 'im' ? (e.orig ?? e.src) : e.src)} alt="" className="block shrink-0" style={{ height: h, width: w }} />
+      <div className="flex flex-col items-start" style={{ gap: 14 }}>
+        <GtChip k={side === 'im' ? 'ImGT' : 'ReGT'} plain size={80} />
+        {side === 'im' ? (
+          <span className="font-body font-semibold text-ink" style={{ fontSize: 120, lineHeight: 1.12 }}>
+            <span style={{ textDecoration: e.ok ? 'none' : `line-through ${RED} 9px` }}>{e.imgt}</span> <span style={{ color: e.ok ? GREEN : RED }}>{e.ok ? '✓' : '✗'}</span>
+          </span>
+        ) : (
+          <span className="font-body font-semibold text-ink" style={{ fontSize: 120, lineHeight: 1.12 }}>
+            {e.regt.split('\n').map((l, i) => (
+              <Fragment key={i}>
+                {i > 0 && <br />}
+                {l}
+              </Fragment>
+            ))}
+          </span>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function ExamplesCard() {
+  const H = 1100
+  const [pier, bar] = [EXAMPLES[2], EXAMPLES[1]]
+  return (
+    <div className="absolute flex items-start justify-between" style={{ left: 110, right: 110, top: 270, bottom: 90 }}>
+      <div className="flex items-start" style={{ gap: 50 }}>
+        <TeaserCol e={pier} h={H} side="im" />
+        <TeaserCol e={bar} h={H} side="im" />
+      </div>
+      <TeaserArrow />
+      <div className="flex items-start" style={{ gap: 50 }}>
+        <TeaserCol e={pier} h={H} side="re" />
+        <TeaserCol e={bar} h={H} side="re" />
+      </div>
     </div>
   )
 }
@@ -2137,26 +2223,28 @@ function ExamplesCard() {
 /* ---------- #14 Annotation is iterative ---------- */
 /* one small-object example: photo + zoomed crop, big, with the ImGT and ReGT labels beside it (as on #09) */
 function ZoomRow({ full, crop, imgt, regt }: { full: string; crop: string; imgt: string; regt: string }) {
-  const H = 960
+  const H = 760
   return (
     <div className="flex items-center" style={{ gap: 70 }}>
       <div className="flex shrink-0" style={{ gap: 24 }}>
-        <img src={asset(full)} alt="" className="block" style={{ height: H, width: 'auto', outline: `10px solid ${INKV}`, outlineOffset: -10 }} />
-        <img src={asset(crop)} alt="" className="block" style={{ height: H, width: 'auto', outline: `10px solid ${INKV}`, outlineOffset: -10 }} />
+        <img src={asset(full)} alt="" className="block" style={{ height: H, width: 'auto' }} />
+        <img src={asset(crop)} alt="" className="block" style={{ height: H, width: 'auto' }} />
       </div>
-      <div className="flex flex-col" style={{ gap: 26, whiteSpace: 'nowrap' }}>
-        <div className="flex items-baseline" style={{ gap: 26 }}>
-          <GtChip k="ImGT" />
-          <span className="font-body font-bold text-ink" style={{ fontSize: 58, lineHeight: 1.15 }}>
-            {imgt}
-          </span>
-        </div>
-        <div className="flex items-baseline" style={{ gap: 26 }}>
-          <GtChip k="ReGT" />
-          <span className="font-body font-bold text-ink" style={{ fontSize: 58, lineHeight: 1.15 }}>
-            {regt}
-          </span>
-        </div>
+      {/* labels as on card 1: plain chip above its text */}
+      <div className="flex flex-col" style={{ gap: 40, whiteSpace: 'nowrap' }}>
+        {(
+          [
+            ['ImGT', imgt],
+            ['ReGT', regt],
+          ] as ['ImGT' | 'ReGT', string][]
+        ).map(([k, t]) => (
+          <div key={k} className="flex flex-col items-start" style={{ gap: 14 }}>
+            <GtChip k={k} plain size={80} />
+            <span className="font-body font-semibold text-ink" style={{ fontSize: 120, lineHeight: 1.12 }}>
+              {t}
+            </span>
+          </div>
+        ))}
       </div>
     </div>
   )
@@ -2165,14 +2253,9 @@ function ZoomRow({ full, crop, imgt, regt }: { full: string; crop: string; imgt:
 function IterativeCard() {
   return (
     <div className="absolute flex flex-col" style={{ left: 120, right: 120, top: 120, gap: 56 }}>
-      <div className="font-body font-bold text-ink" style={{ fontSize: 92, lineHeight: 1.1 }}>
-        Small objects, recognizable only after zooming in
-      </div>
-      <ZoomRow full="zoom-balloon.jpg" crop="zoom-balloon-crop.jpg" imgt="balloon" regt="balloon, minivan, car wheel" />
-      <ZoomRow full="zoom-fountain.jpg" crop="zoom-fountain-crop.jpg" imgt="fountain" regt="fountain, T-shirt, sock" />
-      <Prose style={{ marginTop: 50 }}>
-        Objects a few dozen pixels big, recognizable only from context after zooming, made labels depend on how hard each annotator looked. So the rule was changed mid-annotation:
-        <br />
+      {/* one statement instead of heading + paragraph; kept left of the #11 chip (top right) */}
+      <Prose style={{ fontSize: 120, lineHeight: 1.12, marginRight: 380 }}>
+        Tiny objects, visible only after zooming in, made labels depend on how hard each annotator looked, so we set a rule:{' '}
         <span
           className="font-bold"
           style={{
@@ -2183,13 +2266,18 @@ function IterativeCard() {
           box what you notice at first glance (~5&nbsp;s).
         </span>
       </Prose>
-      <div className="flex flex-col" style={{ gap: 10, marginTop: 140 }}>
-        <div className="font-body font-bold text-ink" style={{ fontSize: 92, lineHeight: 1.1 }}>
-          MLLM vs. trained annotators
-        </div>
-        <div className="font-body font-semibold text-ink" style={{ fontSize: 62, lineHeight: 1.2 }}>
-          Where a frontier MLLM disagreed with our annotations
-        </div>
+      <ZoomRow full="zoom-balloon.jpg" crop="zoom-balloon-crop.jpg" imgt="balloon" regt="balloon, minivan, car wheel" />
+      <ZoomRow full="zoom-fountain.jpg" crop="zoom-fountain-crop.jpg" imgt="fountain" regt="fountain, T-shirt, sock" />
+    </div>
+  )
+}
+
+/* ---------- MLLM vs. trained annotators (split off the iterative card) ---------- */
+function MllmCard() {
+  return (
+    <div className="absolute flex flex-col" style={{ left: 120, right: 120, top: 120, gap: 56 }}>
+      <div className="font-body font-semibold text-ink" style={{ fontSize: 62, lineHeight: 1.2 }}>
+        Where a frontier MLLM disagreed with our annotations
       </div>
       <div className="flex" style={{ border: `10px solid ${INKV}` }}>
         {(
@@ -2245,22 +2333,22 @@ const TAKEAWAYS: [string, string][] = [
 
 function TakeawayCard() {
   return (
-    <div className="absolute flex flex-col" style={{ left: 120, right: 120, top: 270, gap: 120 }}>
+    <div className="absolute flex flex-col" style={{ left: 120, right: 120, top: 130, gap: 60 }}>
       {TAKEAWAYS.map(([h, t], i) => (
-        <div key={h} className="flex items-start" style={{ gap: 40 }}>
+        <div key={h} className="flex items-start" style={{ gap: 40, marginRight: i === 0 ? 380 : 0 }}>
           <div
             className="shrink-0 bg-white font-mono font-bold text-ink"
             style={{
               ...ON_WHITE,
               border: '10px solid #141414',
               padding: '10px 30px 8px',
-              fontSize: 60,
+              fontSize: 96,
               lineHeight: 1.15,
             }}
           >
             {i + 1}
           </div>
-          <Prose>
+          <Prose style={{ fontSize: 120 }}>
             {h} <span style={{ color: 'color-mix(in srgb, var(--color-ink) 60%, transparent)' }}>{t}</span>
           </Prose>
         </div>
@@ -2295,7 +2383,9 @@ function Panel({ id, children }: { id: PanelId; children?: ReactNode }) {
       }}
       data-panel={m.n}
     >
-      <Label group={m.group}>{m.title}</Label>
+      <Label group={m.group} wrapW={m.wrap ? w : undefined}>
+        {m.title}
+      </Label>
       {m.n !== undefined && <Index n={m.n} />}
       {m.contrib && (
         // which contribution (card #02) this block delivers
@@ -2807,18 +2897,21 @@ function Poster() {
         <PipelineCard />
       </Panel>
       <Panel id="A2">
-        <div className="absolute flex flex-col justify-between" style={{ left: 130, right: 130, top: 270, bottom: 110 }}>
-          <div className="font-body font-semibold text-ink" style={{ fontSize: 56, lineHeight: 1.15, opacity: 0.85 }}>
-            Tiles: accuracy change on images with the attribute vs. all single-label images S, in pp (family mean)
-          </div>
-          <div className="flex" style={{ gap: 70 }}>
+        <div className="absolute flex flex-col justify-between" style={{ left: 130, right: 130, top: 270, bottom: 100 }}>
+          <div className="flex flex-col" style={{ gap: 40 }}>
+          <div className="flex" style={{ gap: 50 }}>
             <AttrCell name="rendition" color={ATTR.rendition} src="attr-rendition-piano.jpg" stat={2} text="Toy, drawing or other stylized depiction" />
             <AttrCell name="crowd" color={ATTR.crowd} src="attr-crowd-flamingo.jpg" pos="center bottom" stat={0} text="5+ instances of one class, collapsed into a single box" />
             <AttrCell name="text-recognition" color={ATTR.text} src="attr-text-theater.jpg" stat={3} text="Class is only recognizable by reading the text" />
+            <AttrCell name="reflection" color={ATTR.reflection} src="attr-reflection-mau.jpg" stat={1} text="Object seen in a mirror or water surface" />
+          </div>
+          <Prose style={{ fontSize: 104 }}>
+            Tiles: accuracy change per attribute w.r.t. S images
+          </Prose>
+          <Prose style={{ fontSize: 104 }}>Text: language-aligned models read it (MLLMs +12 pp), supervised ones mostly cannot.<br />Renditions hurt every family, supervised models most.</Prose>
           </div>
           <div className="flex" style={{ gap: 70 }}>
-            <AttrCell name="reflection" color={ATTR.reflection} src="attr-reflection-mau.jpg" stat={1} text="Object seen in a mirror or water surface" />
-            <div className="flex min-w-0 flex-1 flex-col" style={{ gap: 18 }}>
+            <div className="flex min-w-0 flex-col" style={{ gap: 18, width: 'calc((100% - 70px) / 2)' }}>
               <div className="flex" style={{ gap: 20 }}>
                 {[
                   ['attr-dominant-terriers.jpg', 'both dominant'],
@@ -2828,16 +2921,15 @@ function Poster() {
                     <div className="w-full" style={{ aspectRatio: '4 / 3', overflow: 'hidden' }}>
                       <img src={asset(src)} alt="" className="block h-full w-full" style={{ objectFit: 'cover' }} />
                     </div>
-                    <div className="whitespace-nowrap font-mono font-semibold text-ink" style={{ fontSize: 52 }}>
+                    <div className="whitespace-nowrap font-mono font-semibold text-ink" style={{ fontSize: 120 }}>
                       {tag}
                     </div>
                   </div>
                 ))}
               </div>
-              <AttrNote name="dominant" color={ATTR.dominant} text="Noticed immediately: a judgment, not a matter of size" />
             </div>
             <div className="flex min-w-0 flex-1 items-center">
-              <Prose style={{ fontSize: 66 }}>Text: language-aligned models read it (MLLMs +12 pp), supervised ones mostly cannot. Renditions hurt every family, supervised models most.</Prose>
+              <AttrNote name="dominant" color={ATTR.dominant} text="Noticed immediately: a judgment, not a matter of size" />
             </div>
           </div>
         </div>
@@ -2858,7 +2950,7 @@ function Poster() {
       <Panel id="M6">
         <ClassesCard />
         {/* card 14 (prior reannotations' multilabel ratio) merged in below the labeling rules */}
-        <div className="absolute" style={{ left: 0, right: 0, top: 1070, borderTop: '10px dashed rgba(20,20,20,0.3)' }}>
+        <div className="absolute" style={{ left: 0, right: 0, top: 1200, borderTop: '10px dashed rgba(20,20,20,0.3)' }}>
           <PriorCard />
         </div>
       </Panel>
@@ -2867,6 +2959,9 @@ function Poster() {
       </Panel>
       <Panel id="M9">
         <IterativeCard />
+      </Panel>
+      <Panel id="M11">
+        <MllmCard />
       </Panel>
       <Panel id="M10">
         <TakeawayCard />
