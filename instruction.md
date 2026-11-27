@@ -42,6 +42,10 @@ reaches it through a VS Code port-forward of 8443.
     cd /home/kiselnik/proj/neurips-poster-template
     .venv/bin/python tools/poster_svg.py   # writes poster.svg (fonts in .tools/fonts, assets in public/assets)
 
+Figma export (preferred; reads the live page, no script sync needed): with the dev server
+running, `node tools/figma/export.mjs` writes `figma-export/poster.svg` (editable text) and
+verifies it against the page. See [tools/figma/README.md](tools/figma/README.md).
+
 ## 4. Notes
 
 - Poster canvas is 19876 x 12600 px; all layout numbers in App.tsx are px on that canvas.
